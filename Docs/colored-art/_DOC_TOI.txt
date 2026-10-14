@@ -1,0 +1,7 @@
+Ảnh art hiện tại, đã có màu như trong game.
+
+sky, far, mid, near, front, ceiling, ledge, rock, column.png: đúng định dạng ảnh vẽ tay.
+  Mở ra chỉnh, rồi lưu (cùng tên) vào Assets/_Project/Art/Drawn là game dùng ảnh của bạn.
+
+pieces/: từng mảnh riêng lẻ đã tô màu, để xem và làm mẫu.
+Thư mục này được ghi đè mỗi lần chạy menu Octopus → Xuất ảnh màu hiện tại.

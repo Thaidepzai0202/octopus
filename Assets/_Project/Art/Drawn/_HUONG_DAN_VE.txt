@@ -1,0 +1,17 @@
+THẢ ẢNH VẼ TAY VÀO THƯ MỤC NÀY (PNG, nền trong suốt trừ sky.png)
+
+  sky.png      1920 x 1080   phông xa nhất, dính theo camera
+  deep.png     3840 x 1080   toàn cảnh xa nhất (sương, thác), trôi rất chậm
+  far.png      3840 x 1080   lớp nền xa, lặp ngang (mép trái nối liền mép phải)
+  mid.png      3840 x 1080   lớp nền giữa, lặp ngang
+  near.png     3840 x 1080   lớp nền gần, lặp ngang
+  front.png    3840 x 1080   tiền cảnh tối sát mép dưới, lặp ngang
+  ceiling.png  3840 x 1080   trần hang + nhũ đá, lặp ngang, mép trên ảnh là trần
+  ledge.png    2048 x 2048   một gờ đá, mép trên ảnh là mặt sàn
+  rock.png     1024 x 512    một tảng đá treo, mép dưới ảnh là chỗ xúc tu bám
+  column.png    512 x 2048   cột đá nối tảng đá lên trần
+
+Khung mẫu có kẻ vạch nằm ở Docs/art-templates (cùng tên file).
+Vẽ xong: lưu vào đây là Unity tự cập nhật (hoặc menu Octopus → Áp dụng ảnh vẽ tay).
+Chỉnh vị trí / độ cao / độ tối: menu Octopus → Bảng chỉnh ảnh vẽ tay.
+Chi tiết: README.md, phần "Vẽ ảnh tay".

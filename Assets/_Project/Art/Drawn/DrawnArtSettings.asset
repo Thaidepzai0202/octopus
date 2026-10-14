@@ -1,0 +1,84 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8169c660a4834ed593d0db4461592fed, type: 3}
+  m_Name: DrawnArtSettings
+  m_EditorClassIdentifier: Octopus.Editor::Octopus.EditorTools.DrawnArtSettings
+  sky:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offsetY: 0
+    offsetX: 0
+    scale: 1
+    flipX: 0
+    mirrorTiles: 1
+  deep:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offsetY: 0.8
+    offsetX: 0
+    scale: 0.625
+    flipX: 0
+    mirrorTiles: 1
+  far:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offsetY: -2.5
+    offsetX: 0
+    scale: 0.458
+    flipX: 0
+    mirrorTiles: 1
+  mid:
+    tint: {r: 0.75, g: 0.75, b: 0.85, a: 1}
+    offsetY: -4.5
+    offsetX: 0
+    scale: 0.269
+    flipX: 0
+    mirrorTiles: 1
+  near:
+    tint: {r: 0.55, g: 0.55, b: 0.65, a: 1}
+    offsetY: -9
+    offsetX: 0
+    scale: 0.214
+    flipX: 0
+    mirrorTiles: 1
+  front:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offsetY: 0
+    offsetX: 0
+    scale: 1
+    flipX: 0
+    mirrorTiles: 1
+  ceiling:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offsetY: -3.5
+    offsetX: 0
+    scale: 0.7
+    flipX: 0
+    mirrorTiles: 1
+  ledge:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offset: {x: 0, y: 0}
+    scale: 1
+    flipX: 0
+    surface: 0.46
+  rock:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offset: {x: 0, y: 0}
+    scale: 1.15
+    flipX: 0
+    surface: 0.06
+  column:
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    offset: {x: 0, y: 0}
+    scale: 1
+    flipX: 0
+    surface: 0
+  showColumns: 0
+  showLedgeRim: 0
+  autoApply: 1
