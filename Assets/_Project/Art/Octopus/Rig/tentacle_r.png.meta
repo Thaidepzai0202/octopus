@@ -127,7 +127,7 @@ TextureImporter:
     physicsShape: []
     bones:
     - name: R_00
-      guid: fa58beff7430646cc8a2dfb742d85093
+      guid: 9975b0d54b87845ac8ec75d8b88ef9f7
       position: {x: 29.378, y: 154.519, z: 0}
       rotation: {x: 0, y: 0, z: -0.3893265, w: 0.92109984}
       length: 19.919
@@ -136,7 +136,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283190527
     - name: R_01
-      guid: ccde814faddd449b7924237c6fe80d88
+      guid: 6b557c1eb10e248688c437ef90d0843f
       position: {x: 19.919, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: -0.06508354, w: 0.9978798}
       length: 19.919
@@ -145,7 +145,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283210239
     - name: R_02
-      guid: 84d00436f4dde4e28a11b8c8eeb14c14
+      guid: f36cf59ce3e4740388dda5d8efb26793
       position: {x: 19.919, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: -0.10157807, w: 0.99482757}
       length: 19.878
@@ -154,7 +154,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283229951
     - name: R_03
-      guid: 4c57ab7bc6ac044bf95b3d1ee742dd21
+      guid: 10c7e15b8d43c430297a9efffb89bd12
       position: {x: 19.878, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: -0.087169655, w: 0.99619347}
       length: 19.933
@@ -163,7 +163,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283236300
     - name: R_04
-      guid: 4a8d7fa1a35ad45168ac90a36b70e019
+      guid: 1f42f2b3d485944f28867af8272b02a1
       position: {x: 19.933, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: -0.0334116, w: 0.9994417}
       length: 19.945
@@ -172,7 +172,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283236223
     - name: R_05
-      guid: b539e433202054c31b5e7defba4aa3a0
+      guid: 641e6a158c38e4ed9a4a0cf4a73ba4cd
       position: {x: 19.945, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.017159235, w: 0.9998528}
       length: 19.912
@@ -181,7 +181,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4284940108
     - name: R_06
-      guid: 92254b0426bf34139a97cf6849d39105
+      guid: 81b024d27bd7746dfbe1d3140950e248
       position: {x: 19.912, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.26376194, w: 0.9645878}
       length: 19.589
@@ -190,7 +190,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4289920844
     - name: R_07
-      guid: fe3cc31e1fc0949ee8a9998b536bf176
+      guid: e1a17f1b436e048c98a057cbb8dbc2d1
       position: {x: 19.589, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.15682231, w: 0.98762685}
       length: 19.829
@@ -199,7 +199,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294967116
     - name: R_08
-      guid: 463732214a20c428abf92b6c9db17bc2
+      guid: 191b2bc701af44948adf0630373f0efd
       position: {x: 19.829, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.24440797, w: 0.9696725}
       length: 19.668
@@ -208,7 +208,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294947404
     - name: R_09
-      guid: c686f8b0124514935b8e09a673cfc1bd
+      guid: 7e7632fef1db64ae384500174680ed0a
       position: {x: 19.668, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.2556356, w: 0.9667732}
       length: 19.601
@@ -217,7 +217,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294927948
     - name: R_10
-      guid: 3f2c8e121bd244c88a6ab9987ccd8015
+      guid: 6b01cc2672f40417587d9124f1270f62
       position: {x: 19.601, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.26299587, w: 0.96479696}
       length: 19.651
@@ -226,7 +226,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294921343
     - name: R_11
-      guid: 8fd07bd0cf26d40ff883c75afe928e02
+      guid: 325314a665bf5435ebe8b1f269b44eb2
       position: {x: 19.651, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.3408218, w: 0.9401279}
       length: 19.458
@@ -235,7 +235,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294921420
     - name: R_12
-      guid: 385e40d6dedba477f8dd083377f8dbb6
+      guid: 2ff3c1d3deba24a9182db3613072be3d
       position: {x: 19.458, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0.44877708, w: 0.89364374}
       length: 18.866
@@ -244,7 +244,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4293283071
     - name: R_13
-      guid: efdada392685045e9b6c622a7636dda0
+      guid: 1b29d7ea46c76456eb5a4bb9e79234e4
       position: {x: 18.866, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: -0.6433918, w: -0.7655371}
       length: 18.27
@@ -10962,6 +10962,6 @@ TextureImporter:
     nameFileIdTable: {}
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData: rig:d998b9490101c047f399ac20bff9b799
+  userData: rig:9b1071f179841816a5ed00c2b5a092cf
   assetBundleName: 
   assetBundleVariant: 

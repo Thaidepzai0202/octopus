@@ -15,7 +15,7 @@ namespace Octopus
         {
             [Tooltip("Đường dẫn tới tay cầm, tính từ Rig Visual (vd Pose/Crawl/Foot R)")]
             public string path;
-            [Tooltip("Thuộc tính: m_LocalPosition.x / .y, curl, contact, mantle")]
+            [Tooltip("Thuộc tính: m_LocalPosition.x / .y, curl, contact, peak, mantle")]
             public string property;
             public AnimationCurve curve = new AnimationCurve();
         }
@@ -24,6 +24,8 @@ namespace Octopus
         public AnimationClip source;
         [Tooltip("Độ dài clip (giây) = một vòng bò")]
         public float length = 1f;
+        [Tooltip("Clip đã được sửa tay (bảng ⚡ / cửa sổ Animation). Chưa sửa thì game dùng thẳng các ô \"Bò bằng code\"")]
+        public bool handEdited;
         public Channel[] channels = Array.Empty<Channel>();
 
         struct Target
@@ -64,6 +66,8 @@ namespace Octopus
                         target.Foot.curl = value;
                     else if (target.Field == "contact")
                         target.Foot.contact = value;
+                    else if (target.Field == "peak")
+                        target.Foot.peak = value;
                 }
                 else if (target.Body != null && target.Field == "mantle")
                 {
@@ -106,6 +110,7 @@ namespace Octopus
                     case "m_LocalPosition.z": target.Axis = 2; break;
                     case "curl":
                     case "contact":
+                    case "peak":
                         target.Foot = t.GetComponent<OctopusCrawlFoot>();
                         break;
                     case "mantle":

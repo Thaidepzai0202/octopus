@@ -23,8 +23,8 @@ namespace Octopus
         [Header("Đu")]
         [Tooltip("Lực đẩy theo phương tiếp tuyến khi vuốt trái/phải")]
         [SerializeField] float pumpForce = 15f;
-        [Tooltip("Không vuốt thì tự đẩy theo hướng đang đu với lực này. 0 = tắt")]
-        [SerializeField, Min(0f)] float autoPumpForce = 3f;
+        [Tooltip("Không vuốt, không giữ tay thì giữ nguyên đà đu: không tự mạnh lên, không yếu dần")]
+        [SerializeField] bool holdSwingEnergy = true;
         [Tooltip("Bắn xúc tu khi đang đứng trên sàn thì bị giật về phía đá với vận tốc này")]
         [SerializeField, Min(0f)] float groundLaunchSpeed = 12f;
         [Tooltip("Nhân vận tốc lúc buông xúc tu cho cảm giác văng")]
@@ -33,6 +33,8 @@ namespace Octopus
 
         Rigidbody2D _body;
         DistanceJoint2D _rope;
+        float _swingEnergy; // cơ năng / khối lượng của nhịp đu đang giữ
+        bool _swingEnergyStale = true;
 
         public LayerMask AnchorMask => anchorMask;
         public float Reach => reach;
@@ -75,6 +77,7 @@ namespace Octopus
                 Pump();
                 if (Reeling)
                     ReelIn();
+                HoldEnergy();
             }
 
             _body.linearVelocity = Vector2.ClampMagnitude(_body.linearVelocity, maxSpeed);
@@ -102,6 +105,7 @@ namespace Octopus
             _rope.connectedAnchor = hit.point;
             _rope.distance = Mathf.Clamp(Vector2.Distance(_body.position, hit.point), clingDistance, reach);
             _rope.enabled = true;
+            _swingEnergyStale = true;
             Attached?.Invoke(hit.point);
         }
 
@@ -128,22 +132,42 @@ namespace Octopus
         // Đẩy theo phương vuông góc với dây, giống đạp chân khi đánh đu
         void Pump()
         {
+            if (PumpInput == 0f)
+                return;
+
             Vector2 toAnchor = (_rope.connectedAnchor - _body.position).normalized;
             Vector2 tangent = new Vector2(toAnchor.y, -toAnchor.x);
-
-            float force = PumpInput * pumpForce;
-            if (force == 0f && !Reeling)
-                force = AutoPump(tangent);
-
-            if (force != 0f)
-                _body.AddForce(tangent * force);
+            _body.AddForce(tangent * (PumpInput * pumpForce));
         }
 
-        // Không vuốt thì đẩy nhẹ theo hướng đang đu, biên độ tăng dần như tự nhún
-        float AutoPump(Vector2 tangent)
+        // Không vuốt, không rút: giữ nguyên cơ năng (động năng + thế năng) của nhịp đu, nên mỗi nhịp lên đúng độ cao
+        // nhịp trước — không tự mạnh lên, cũng không bị bộ giải vật lý ăn mòn dần. Vuốt / rút / dây chùng / va vào đá
+        // thì cơ năng đổi; buông tay ra là giữ mức mới.
+        // Chỉ va chạm thật mới tính; đi xuyên vùng trigger (bia tập, vùng rơi) không làm mất cơ năng
+        static readonly ContactFilter2D SolidContacts = new ContactFilter2D { useTriggers = false };
+
+        void HoldEnergy()
         {
-            float tangentialSpeed = Vector2.Dot(_body.linearVelocity, tangent);
-            return Mathf.Abs(tangentialSpeed) > 0.5f ? Mathf.Sign(tangentialSpeed) * autoPumpForce : 0f;
+            bool taut = Vector2.Distance(_body.position, _rope.connectedAnchor) >= _rope.distance - 0.05f;
+            if (!holdSwingEnergy || PumpInput != 0f || Reeling || !taut || _body.IsTouching(SolidContacts))
+            {
+                _swingEnergyStale = true;
+                return;
+            }
+
+            float potential = -Vector2.Dot(Physics2D.gravity * _body.gravityScale, _body.position);
+            float kinetic = 0.5f * _body.linearVelocity.sqrMagnitude;
+            if (_swingEnergyStale)
+            {
+                _swingEnergy = kinetic + potential;
+                _swingEnergyStale = false;
+                return;
+            }
+
+            if (kinetic < 0.0001f)
+                return; // đứng yên ở đỉnh nhịp: để trọng lực tự kéo quay đầu
+            float targetKinetic = Mathf.Max(0f, _swingEnergy - potential);
+            _body.linearVelocity *= Mathf.Sqrt(targetKinetic / kinetic);
         }
 
         // Rút xúc tu = lực hướng tâm nên mô-men động lượng bảo toàn: r · v_tiếp_tuyến = hằng số.

@@ -8,7 +8,9 @@
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.RenderPipelines.Universal.2D.Runtime",
         "Unity.2D.Sprite.Editor",
-        "Unity.2D.Animation.Runtime"
+        "Unity.2D.Animation.Runtime",
+        "UnityEngine.UI",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

@@ -69,7 +69,8 @@ Các dáng khác trong ô Preview:
 | Jump | Đang bay lên |
 | Fall | Rơi nhanh |
 | Swing | Đu bằng xúc tu |
-| Cling | Bám dưới đá |
+| Cling | Treo ngược dưới đá (đứng yên) |
+| Cling Crawl | Bò ngược dọc mặt dưới đá |
 
 Khi không chạy thử, kéo thanh **Preview Time** để xem từng khoảnh khắc. Kéo hết sang phải thì mắt nhắm (để xem mí mắt).
 
@@ -474,12 +475,12 @@ Chọn `Rig Visual`, xem Inspector. Bấm **▶ Chạy thử trong Scene** (Prev
 
 | Muốn | Ô | Mặc định |
 |---|---|---|
-| Đầu thấp hơn / cao hơn khi bò | **Crawl Crouch** (mục Bò) | 0.14 |
+| Đầu thấp hơn / cao hơn khi bò | **Crawl Crouch** (mục Bò) | 0.2 |
 | Đầu dẹt xuống khi bò | **Crawl Flatten** | 0.05 |
-| Xúc tu uốn sóng mạnh / nhẹ | **Wave Amount** (mục Sóng uốn lượn trên xúc tu) | 6 |
-| Ngọn uốn mạnh hơn gốc bao nhiêu lần | **Wave Tip Boost** | 2.6 |
-| Sóng dày (nhiều gợn) / thưa | **Wave Length** (nhỏ = dày) | 7 |
-| Sóng chạy nhanh / chậm | **Wave Speed** | 7 |
+| Xúc tu uốn sóng mạnh / nhẹ | **Wave Amount** (mục Sóng uốn lượn trên xúc tu) | 13 |
+| Ngọn uốn mạnh hơn gốc bao nhiêu lần | **Wave Tip Boost** | 2 |
+| Sóng dày (nhiều gợn) / thưa | **Wave Length** (nhỏ = dày) | 8 |
+| Sóng chạy nhanh / chậm | **Wave Speed** | 6 |
 | Đứng yên còn uốn bao nhiêu | **Wave Idle** (0 = đứng yên không uốn) | 0.3 |
 | Vây quanh đầu lắc nhiều / ít | **Fin Sway** (mục Vây quanh đầu lượn sóng; 0 = đứng yên) | 18 |
 | Vây vươn ra thu vào | **Fin Pulse** | 0.08 |
@@ -491,28 +492,169 @@ Chọn `Rig Visual`, xem Inspector. Bấm **▶ Chạy thử trong Scene** (Prev
 
 ---
 
-# Kiểu bò "Trườn" (đang dùng) và dáng đứng
+# Kiểu bò "Trườn" (đang dùng): 3 xúc tu trườn hình con rắn
 
-- **Đi:** xúc tu nằm dài sát đất, uốn sóng như rắn từ gốc ra ngọn; chóp chỉ trượt nhẹ tới lui, không nhấc lên bước. Thân lướt êm, đầu hạ thấp.
-- **Đứng:** đầu hạ thấp, hai xúc tu bên xoè ra nằm trên đất, uốn sóng chậm.
-- Clip `Crawl.anim` đã tạo lại theo kiểu trườn: mỗi tay cầm một keyframe mỗi 10 frame, **Bám chặt** luôn tắt (chóp được trượt).
-  Clip kiểu bước trước đó (có phần bạn đã sửa) được sao lưu ở `Assets/_Project/Art/Octopus/Rig/Backup/Crawl_cu.anim`.
+- **Đi:** mỗi xúc tu hạ xuống chạm đất gần thân, rồi **từ đó ra tận ngọn nằm dài trên đất thành các khúc uốn hình chữ S** như thân rắn.
+  Các khúc sóng chạy dọc xúc tu **về phía sau** so với hướng đi, giống rắn trườn:
+  - Xúc tu **phía trước**: vươn ra trước, sóng chạy từ ngọn về thân.
+  - Xúc tu **phía sau** và xúc tu **giữa**: kéo lê phía sau, sóng chạy từ thân ra ngọn.
+  - Đứng lại thì sóng dừng; bò càng nhanh, sóng chạy càng nhanh.
+- **Đứng:** đầu hạ thấp, xúc tu về dáng như tranh (ngọn cuộn), uốn sóng chậm.
+- **Đổi hướng:** thân không lật, chỉ đổi vai xúc tu trước / sau (xem phần "Đổi hướng" bên dưới).
+- Ảnh `Docs/octopus/xem_rig/xem_truon_uon_luon.png`: hàng 1 cột 1–2 đứng yên, rồi bò sang phải, hàng cuối bò sang trái.
+  Ảnh cận `Docs/octopus/xem_rig/xem_truon_ran_gan.png`: 3 khung bò sang phải và 1 khung bò sang trái, nhìn rõ các khúc chữ S.
+- Clip `Crawl.anim` đã tạo lại theo kiểu này. **Tay cầm Foot L / M / R = chỗ xúc tu chạm đất** (kéo là chỗ chạm đất dời theo);
+  **Curl** = chóp cong lên. Các clip cũ được sao lưu trong `Assets/_Project/Art/Octopus/Rig/Backup/`.
 
-| Muốn | Ô (chọn Rig Visual) | Mặc định |
+## Chỉnh dáng rắn (chọn `Rig Visual`, mục "Bò bằng code")
+| Muốn | Ô | Mặc định |
 |---|---|---|
-| Đầu thấp hơn lúc **đứng** | **Idle Crouch** (mục Đứng yên) | 0.22 |
-| Đầu thấp thêm lúc **đi** | **Crawl Crouch** (mục Bò) | 0.15 |
-| Hai xúc tu bên xoè rộng hơn lúc đứng | **Idle Spread** | 0.1 |
-| Xúc tu uốn mạnh hơn | **Wave Amount** | 9 |
-| Sóng dài, mềm hơn / ngắn, gợn hơn | **Wave Length** (lớn = dài mềm) | 9 |
-| Ngọn uốn mạnh hơn gốc | **Wave Tip Boost** | 1.8 |
-| Đứng yên vẫn uốn nhiều | **Wave Idle** | 0.45 |
-| Quay về kiểu bước (nhấc chân) | **Crawl Style** = Step, rồi bấm **Tạo lại clip bò…** | Slither |
+| Khúc uốn gồ cao hơn / thấp hơn (0 = nằm thẳng) | **Snake Height** | 0.15 |
+| Khúc sóng dài, mềm hơn / ngắn, nhiều khúc hơn | **Snake Length** (lớn = dài mềm) | 0.4 |
+| Sóng chạy dọc xúc tu nhanh / chậm (0 = đứng yên) | **Snake Flow** | 1 |
+| Xúc tu chạm đất sớm hơn (đoạn nằm trên đất dài hơn) | **Snake Base Bone** (nhỏ = dài hơn) | 4 |
+| Chỗ chạm đất xa thân hơn | **Snake Base Out** | 0.16 |
+| Xúc tu nằm cao hơn khỏi mặt đất | **Snake Thickness** | 0.05 |
+| Xúc tu giữa vươn ra trước thay vì kéo lê phía sau | tick **Snake Middle Forward** | tắt |
+| Đầu thấp hơn lúc **đứng** / thêm lúc **đi** | **Idle Crouch** / **Crawl Crouch** (tối đa 0.5) | 0.27 / 0.2 |
+| Quay về kiểu sâu đo / kiểu bước | **Crawl Style** = Inchworm / Step, rồi bấm **Tạo lại clip bò…** | Slither |
 
-Muốn chỉnh riêng từng xúc tu khi trườn: mục **Slither** (0 trái, 1 giữa, 2 phải):
-- **Reach:** chóp nằm xa chỗ nghỉ bao nhiêu (âm = duỗi ra sau).
-- **Slide:** trượt tới lui bao nhiêu.
-- **Curl:** chóp cuộn bao nhiêu (nhỏ = duỗi dài sát đất).
-- **Curl Swing:** độ cuộn lên xuống theo nhịp.
+Chỉnh riêng từng xúc tu: mục **Slither** (0 xúc tu phía sau, 1 giữa, 2 phía trước, theo hướng đang đi):
+- **Reach:** dời chỗ chạm đất (dương = về phía trước).
+- **Slide:** chỗ chạm đất trượt tới lui bao nhiêu theo nhịp.
+- **Curl:** chóp cong lên (0 = thẳng như đuôi rắn, 1 = cong lên khoảng 60 độ).
+- **Curl Swing:** độ cong chóp lên xuống theo nhịp.
 
-Chỉnh xong bấm **Tạo lại clip bò từ thông số "Bò bằng code"…** để clip lấy dáng mới (hoặc chỉnh thẳng clip bằng bảng ⚡).
+Các ô **Wave…** giờ chỉ còn tác dụng lúc đứng và ở đoạn gốc xúc tu; dáng rắn lúc đi do các ô **Snake…** quyết định.
+
+---
+
+# Bò ngược dưới đá (treo ngược)
+
+- **Bám vào đá** (đu tới rồi giữ tay): bạch tuộc **lật ngược người**, cả 3 xúc tu bám lên mặt dưới đá, đầu và mắt chúc xuống.
+- **Vuốt ngang khi đang bám**: bò ngược dọc mặt đá; cả 3 xúc tu **trườn hình rắn** y như khi bò trên sàn (dùng chung các ô
+  Snake Height / Length / Flow, Slither…), chỉ là lật ngược. Đổi hướng không lật thân.
+- **Chạm nhanh**: buông đá, rơi xuống và lật người đứng thẳng lại.
+- Ảnh `Docs/octopus/xem_rig/xem_bo_nguoc.png`: hàng 1 bắn xúc tu và đu lên, hàng 2 lật người treo ngược,
+  hàng 3 bò ngược sang trái, hàng 4 bò ngược sang phải.
+
+Xem thử không cần Play: chọn `Rig Visual`, **Preview** = **Cling** (treo yên) hoặc **Cling Crawl** (bò ngược), bấm **▶ Chạy thử**.
+
+| Muốn | Ô (mục "Bám ngược dưới đá") | Mặc định |
+|---|---|---|
+| Thân sát đá hơn (xúc tu nằm dọc đá dài hơn) / treo lủng lẳng xa đá hơn | **Cling Crouch** (lớn = sát đá, âm = treo xa) | 0.3 |
+| Xúc tu ép sát vào đá hơn (nếu thấy hở với mép đá) | **Cling Reach** | 0.03 |
+| Lật người nhanh / chậm khi bám vào, rời đá | **Hang Flip Time** (giây) | 0.25 |
+
+Khi treo xa đá, đoạn gốc xúc tu tự dài thêm cho với tới đá (ô **Snake Base Bone** là số xương ít nhất).
+
+---
+
+# Chiêu laze
+
+Giờ là **nút 2 (chạm) của bạch tuộc** trong cụm 3 nút chiêu góc dưới bên phải (phím **2** trong Editor). Cả bộ chiêu xem
+`Docs/ky_nang/PHAN_TICH_KY_NANG.md`. Diễn biến khi bắn:
+1. **Vận sức 1 giây:** mắt mở to, sáng dần, con ngươi co thành khe mảnh nhìn theo hướng bắn; sét tím lách tách quanh đầu,
+   hạt năng lượng hút vào mắt; đầu run nhẹ.
+2. **Bắn 2 giây:** tia mảnh bắn ra rồi bung thành chùm laze (viền tím, giữa xanh, lõi trắng), chớp sáng ở mắt, thân giật lùi,
+   đầu ngả ra sau. Tia bắn **ngang theo hướng đang quay mặt lúc bấm**, dừng ở sàn / vách / đá đầu tiên (chỗ trúng toé tia lửa).
+   Bia tập nào tia đi qua đều mất máu.
+3. **Tắt:** tia co lại, mắt lim dim, khói bốc lên.
+4. **Hồi chiêu 5 giây** (tính từ lúc tia tắt): nút 2 tối lại, vùng tối quét theo chiều kim đồng hồ, số giây đếm ngược.
+   Bấm khi chưa hồi xong thì nút lắc.
+
+Vừa bắn vừa bò, nhảy, đu, bám vẫn được. Chạm vào nút không làm bạch tuộc nhảy hay bắn xúc tu.
+Ảnh: `Docs/octopus/skill/xem_laze.png` (vận sức → tia mảnh → tia bung → tắt → khói).
+
+| Muốn chỉnh | Chọn trong Hierarchy | Ô |
+|---|---|---|
+| Thời gian vận sức / bắn, độ to tia | `Octopus` › **Combat Controller** › **Octopus Skills** › Element 3 (Laze mắt) › **Shot** | **Charge** (1), **Fire** (2), **Width** (1) |
+| Hồi chiêu, sát thương | cùng chỗ | **Cooldown** (5), **Damage Per Second** (110) |
+| Tia dài tối đa, tia dừng ở lớp nào | `Octopus` › **Laser Skill** | **Range** (16), **Block Mask** |
+| Màu tia, độ dày từng lớp | `Octopus › Laser FX` (**Laser Beam View**) | **Outer / Mid / Core Width**, **Outer / Mid / Core Color**, **Charge Color** |
+| Tia bung nhanh / chậm | Laser FX | **Burst Time** (0.2) |
+| Mắt mở to, con ngươi co, mỏi mắt, giật lùi | `Octopus › Rig Visual`, mục **Chiêu laze** | **Laser Eye Widen**, **Laser Pupil Slit**, **Laser Tired Time**, **Laser Recoil**, **Laser Kick** |
+
+Các ô **Charge Time / Fire Time / Cooldown** trên component Laser Skill không còn dùng cho nút (mỗi chiêu laze tự có **Shot**
+riêng). Quét laze, Đại pháo laze của bạch tuộc và Laze tám mắt của nhện đều dùng chung tia này, chỉ khác Shot.
+
+Biểu tượng nút 2 của bạch tuộc: `Assets/_Project/Art/UI/Skill_Octopus_2.png`, sinh từ `LaserSkillIcon.png`
+(`python3 Tools/art/laser_icon.py` rồi `python3 Tools/art/skill_icons.py`). Ảnh mẫu bạn gửi: `Docs/octopus/skill/laze_tham_khao.png`.
+
+---
+
+# Chỉnh mà xúc tu không đổi? (đã sửa)
+
+Trước đây có 3 "bẫy". Giờ đã gỡ:
+
+1. **Các ô "Bò bằng code" (Crawl Style, Slither, Gait…) không ăn.**
+   - **Trước:** đang dùng clip bò thì các ô này chỉ có tác dụng sau khi bấm "Tạo lại clip".
+   - **Bây giờ:** clip **chưa sửa tay** thì game dùng thẳng các ô này, **kéo là xúc tu đổi ngay** (lúc Play lẫn lúc ▶ Chạy thử). Clip tự viết lại cho khớp.
+   - **Chỉ khi** bạn đã **sửa tay** clip (bảng ⚡ / cửa sổ Animation) thì clip mới điều khiển. Inspector hiện khung vàng báo điều đó, kèm nút đỏ **"Bỏ phần sửa tay, dùng lại các ô Bò bằng code"**.
+2. **Chỉnh trong lúc Play bị mất khi dừng.**
+   - Đang Play, trên Inspector của Rig Visual có nút **📌 Giữ các thông số đã chỉnh khi dừng Play**.
+   - Bấm nút này trước khi dừng: các con số được giữ lại. Sau đó bấm **Cmd + S** để lưu scene.
+3. **Xoay xương / kéo tay cầm trực tiếp bị bật lại.**
+   - Đó là vì code điều khiển xương mỗi frame.
+   - Muốn tự xoay xương: tắt **Drive Bones** (Inspector báo vàng khi đang tắt).
+   - Muốn chỉnh dáng bò bằng tay: dùng **bảng ⚡**.
+
+## Chỉnh xúc tu nhanh nhất
+1. Chọn `Octopus › Rig Visual`.
+2. **Preview** = **Crawl** (xem lúc đi) hoặc **Idle** (lúc đứng). Bấm **▶ Chạy thử trong Scene**.
+3. Các ô dùng chung cho cả 3 xúc tu khi đi:
+   - **Snake Height:** khúc uốn cao hay thấp.
+   - **Snake Length:** khúc sóng dài hay ngắn.
+   - **Snake Flow:** sóng chạy nhanh hay chậm.
+   - **Idle Crouch / Crawl Crouch:** đầu thấp.
+4. Muốn chỉnh riêng từng xúc tu: mục **Slither** (Element 0 phía sau, 1 giữa, 2 phía trước):
+   - **Reach / Slide:** dời chỗ chạm đất, trượt tới lui.
+   - **Curl / Curl Swing:** chóp cong lên bao nhiêu.
+   - Lúc đứng: **Wave Amount / Wave Length / Wave Speed** (sóng uốn), **Idle Spread** (xoè).
+5. Ưng thì **Cmd + S**.
+
+
+---
+
+# Kiểu bò "Sâu đo" (đã tắt, bật lại được) và đổi hướng không lật thân
+
+> **Đã tắt.** Giờ dùng kiểu **Trườn**: cả 3 xúc tu uốn lượn (phần trên). Muốn bật lại sâu đo: chọn `Rig Visual` →
+> **Crawl Style** = **Inchworm** → bấm **Tạo lại clip bò từ thông số "Bò bằng code"…**. Clip sâu đo cũ vẫn giữ ở
+> `Backup/Crawl_sau_do.anim`. Phần **Đổi hướng** bên dưới thì vẫn đúng cho mọi kiểu bò.
+
+## Xúc tu bên làm gì
+Một vòng của xúc tu **phía trước** (theo hình bạn vẽ; ảnh `Docs/octopus/xem_rig/xem_sau_do_xuc_tu_phai.png`):
+1. Nằm thẳng sát đất.
+2. Chóp bám đất, thân tiến lên nên chóp lùi dần về gốc: giữa gồ lên.
+3. Vòm cao, chóp quặp xuống đất.
+4. Chóp nhấc lên vươn ra trước, đỉnh vòm lệch về phía gốc.
+5. Nằm thẳng lại, xa hơn lúc đầu.
+
+Xúc tu **phía sau** làm **ngược lại**: chóp bám đất, thân tiến lên nên nó bị kéo căng từ vòm thành thẳng; rồi chóp nhấc lên thu về gần gốc để vồng lên lại. Xúc tu giữa trườn sát đất dưới thân.
+
+## Đổi hướng
+- **Không lật cả con nữa:** đầu, mắt giữ nguyên chiều.
+- **Đi sang phải:** xúc tu phải là phía trước, xúc tu trái là phía sau.
+- **Đi sang trái:** đổi vai cho nhau.
+- **Đầu và con ngươi:** đầu ngả ra sau theo hướng đi, con ngươi nhìn theo hướng đi.
+- Muốn quay lại kiểu lật cả con: tick **Flip Body** (mục Kích thước).
+
+## Chỉnh (Rig Visual → Inspector, mục "Bò bằng code")
+| Muốn | Ô | Mặc định |
+|---|---|---|
+| Vòm cao hơn (chóp co về gần gốc hơn) | **Inch Arch** (nhỏ = vòm cao) | 0.45 |
+| Chóp nhấc cao hơn khi vươn tới | **Inch Lift** | 0.12 |
+| Đỉnh vòm lệch về gốc nhiều hơn khi vươn | **Inch Skew** (nhỏ = sát gốc) | 0.28 |
+| Chóp quặp nhiều / ít | **Inch Hook** | 0.9 |
+| Chỗ xúc tu chạm đất xa thân hơn | **Inch Base Out** | 0.22 |
+| Đoạn uốn vòm dài hơn (chạm đất sớm hơn) | **Inch Base Bone** (nhỏ = đoạn vòm dài) | 5 |
+| Xúc tu sau lệch nhịp so với xúc tu trước | **Inch Rear Phase** | 0 |
+| Nhịp bò chậm / nhanh | **Cycle Distance** (mục Bò; lớn = chậm, sải dài) | 1 |
+| Bật kiểu sâu đo / kiểu bước | **Crawl Style** = Inchworm / Step, rồi bấm **Tạo lại clip bò…** | Slither |
+
+## Chỉnh tay từng frame (bảng ⚡)
+- (Chỉ khi Crawl Style = Inchworm) Với xúc tu trái / phải, **tay cầm = chóp xúc tu**: kéo chóp lại gần thân là vòm tự cao lên, kéo ra xa là nằm thẳng.
+- Ô **Đỉnh vòm** chỉnh chỗ cao nhất của vòm. Ô **Cuộn / quặp chóp** chỉnh độ quặp. **Bám chặt** = chóp đang bám đất (khoá chân).
+- Clip làm cho hướng đi sang phải. Đi sang trái thì game tự lật gương và đổi vai hai xúc tu.
+- **Đừng kéo thẳng các xương** (R_03, R_07…) khi đang Record: code ghi đè, chỉ kéo tay cầm.
+  Bản bạn thử tay lúc trước được giữ ở `Assets/_Project/Art/Octopus/Rig/Backup/Crawl_thu_tay.anim`.

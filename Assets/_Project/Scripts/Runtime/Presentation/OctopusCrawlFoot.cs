@@ -3,8 +3,8 @@ using UnityEngine;
 namespace Octopus
 {
     /// <summary>
-    /// Tay cầm chóp một xúc tu trong clip bò (Crawl.anim). Vị trí tay cầm = chỗ chóp xúc tu chạm tới; IK tự uốn cả
-    /// xúc tu theo. Bấm Record trong cửa sổ Animation rồi kéo tay cầm trong Scene để đặt keyframe.
+    /// Tay cầm một xúc tu trong clip bò (Crawl.anim). Kiểu sâu đo (xúc tu trái / phải): tay cầm = chóp xúc tu, đoạn giữa
+    /// tự uốn thành vòm (kéo chóp lại gần gốc là vòm cao lên). Kiểu khác / xúc tu giữa: tay cầm = chỗ chạm đất, IK uốn theo.
     /// </summary>
     public class OctopusCrawlFoot : MonoBehaviour
     {
@@ -13,6 +13,9 @@ namespace Octopus
 
         [Tooltip("1 = chóp đang bám đất (đứng yên trên đất khi thân trôi qua), 0 = đang nhấc lên đưa tới")]
         [Range(0f, 1f)] public float contact = 1f;
+
+        [Tooltip("Kiểu sâu đo: đỉnh vòm nằm ở đâu giữa gốc và chóp (0.5 = giữa, nhỏ = gần gốc)")]
+        [Range(0.1f, 0.9f)] public float peak = 0.5f;
 
         void OnDrawGizmos()
         {

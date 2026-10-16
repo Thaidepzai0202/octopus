@@ -127,7 +127,7 @@ TextureImporter:
     physicsShape: []
     bones:
     - name: MANTLE_00
-      guid: 1fba9e94fc9014c1cb9c37f5f66b5c3f
+      guid: 9b4880b6632704353abdf9792c7737f4
       position: {x: 129.351, y: 36.339, z: 0}
       rotation: {x: 0, y: 0, z: 0.71821195, w: 0.69582444}
       length: 55.169
@@ -136,7 +136,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283190527
     - name: MANTLE_01
-      guid: 0f7b7ce7367574dcaad3247625ac3bb4
+      guid: 5c932db4837404a5bba1170016cf1f92
       position: {x: 55.169, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0, w: 1}
       length: 67.499
@@ -145,7 +145,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283208959
     - name: MANTLE_02
-      guid: c66f506334c324f5fb56df0097131ccf
+      guid: 546201784a7fd4194970b8d406582da1
       position: {x: 67.499, y: 0, z: 0}
       rotation: {x: 0, y: 0, z: 0, w: 1}
       length: 77.141
@@ -154,7 +154,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283227135
     - name: FIN_00
-      guid: 7f61dad98536343a7bfe2ab9480a81cb
+      guid: 743adcd5e11be489da27e57d7e3d7851
       position: {x: 2.445, y: -47.971, z: 0}
       rotation: {x: 0, y: 0, z: -0.9127996, w: 0.40840772}
       length: 48.068
@@ -163,7 +163,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283236315
     - name: FIN_01
-      guid: 4aa8b1531765b41f897af01c008d4a82
+      guid: edce8a2893cf246f3b7d2702fd846e39
       position: {x: 24.38, y: -66.448, z: 0}
       rotation: {x: 0, y: 0, z: -0.80986094, w: 0.5866219}
       length: 51.8
@@ -172,7 +172,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283236244
     - name: FIN_02
-      guid: 1da6ab2e3236b49ed82fc881696688d5
+      guid: 25e9b317cdc2844cd83f48747162975d
       position: {x: 52.607, y: -60.563, z: 0}
       rotation: {x: 0, y: 0, z: -0.6726729, w: 0.7399399}
       length: 45.161
@@ -181,7 +181,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4283236172
     - name: FIN_03
-      guid: ca17b04c6c6814509aea2be3be9d5292
+      guid: 7a47b3e430ca04de791f3b64209f8142
       position: {x: 6.362, y: -47.366, z: 0}
       rotation: {x: 0, y: 0, z: -0.5069841, w: 0.8619554}
       length: 40.504
@@ -190,7 +190,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4287954764
     - name: FIN_04
-      guid: 7aee452affb8b4e1e954d312b6191095
+      guid: ce189717bff26455e9cafc6302cc43a0
       position: {x: 18.124, y: -28.136, z: 0}
       rotation: {x: 0, y: 0, z: -0.31971517, w: 0.9475137}
       length: 35.446
@@ -199,7 +199,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4292607820
     - name: FIN_05
-      guid: 9562099d14b6c46369bede0faaf52f3d
+      guid: 7e96310d43bc7430ca41649b48fcb39e
       position: {x: 35.109, y: -12.053, z: 0}
       rotation: {x: 0, y: 0, z: -0.11876704, w: 0.9929221}
       length: 41.675
@@ -208,7 +208,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294957900
     - name: FIN_06
-      guid: 34e4f43f436e34082910e9b780012b42
+      guid: ec4040f547e39446a985ca846fe570d4
       position: {x: 35.676, y: 11.496, z: 0}
       rotation: {x: 0, y: 0, z: 0.087275706, w: 0.9961842}
       length: 41.542
@@ -217,7 +217,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294939724
     - name: FIN_07
-      guid: ba60f27d85ce346bcae62fc900ec7a13
+      guid: 3df68cbdffafd4527b6503300d37e2b5
       position: {x: 20.686, y: 29.161, z: 0}
       rotation: {x: 0, y: 0, z: 0.28956056, w: 0.9571597}
       length: 36.109
@@ -226,7 +226,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294921292
     - name: FIN_08
-      guid: 4e121726297bc421f878541b29be8e6f
+      guid: 699fbac2ba92f40a29da9f3512461134
       position: {x: 9.005, y: 47.971, z: 0}
       rotation: {x: 0, y: 0, z: 0.4794433, w: 0.87757283}
       length: 39.973
@@ -235,7 +235,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294921364
     - name: FIN_09
-      guid: 68d5f58d778774033a439bbb4f25de03
+      guid: 6c2eb6a46bb8e48fabfbf98d00dfc62e
       position: {x: 56.958, y: 65.822, z: 0}
       rotation: {x: 0, y: 0, z: 0.6489123, w: 0.7608632}
       length: 47.154
@@ -244,7 +244,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4294921435
     - name: FIN_10
-      guid: c79bab80d160040c6acf991870de507e
+      guid: 92e1238456b584528845281fdabac1fe
       position: {x: 28.726, y: 70.764, z: 0}
       rotation: {x: 0, y: 0, z: -0.79088455, w: -0.6119654}
       length: 51.8
@@ -253,7 +253,7 @@ TextureImporter:
         serializedVersion: 2
         rgba: 4292562175
     - name: FIN_11
-      guid: aaa01dd7634834d3491ca11945afd360
+      guid: 298cfbc9707d748b49ea3dacc621860b
       position: {x: 7.819, y: 50.973, z: 0}
       rotation: {x: 0, y: 0, z: -0.8994132, w: -0.4370993}
       length: 45.545
@@ -11639,6 +11639,6 @@ TextureImporter:
     nameFileIdTable: {}
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData: rig:bcd6d01f3b095019ef1f7e0d3abf49a7
+  userData: rig:b1652d49f9558e62b4acd8e88778ca5e
   assetBundleName: 
   assetBundleVariant: 

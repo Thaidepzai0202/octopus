@@ -26,12 +26,15 @@ namespace Octopus
     /// chỗ chân bám (chấm xanh) và đích IK (dấu +) ngay trong cửa sổ Scene.
     /// </summary>
     [ExecuteAlways]
-    public class OctopusRigAnimator : MonoBehaviour
+    public class OctopusRigAnimator : MonoBehaviour, ILaserEye, ICombatAnimator
     {
-        public enum Preview { Idle, Crawl, Jump, Fall, Swing, Cling }
+        public enum Preview { Idle, Crawl, Jump, Fall, Swing, Cling, ClingCrawl }
 
-        /// <summary>Trườn: xúc tu sát đất uốn sóng như rắn, thân lướt êm. Bước: nhấc từng xúc tu lên đặt xuống.</summary>
-        public enum CrawlStyle { Slither, Step }
+        /// <summary>
+        /// Trườn: xúc tu sát đất uốn sóng như rắn. Bước: nhấc từng xúc tu lên đặt xuống.
+        /// Sâu đo: hai xúc tu bên co lại thành vòm rồi vươn ra nằm thẳng (xúc tu sau làm ngược lại), xúc tu giữa trườn.
+        /// </summary>
+        public enum CrawlStyle { Slither, Step, Inchworm }
 
         enum Mode { Ground, Air, Swing, Cling }
 
@@ -66,13 +69,24 @@ namespace Octopus
             [NonSerialized] public bool reaching;       // đang vươn / nắm một điểm: bám sát đích thay vì lò xo
             [NonSerialized] public float reach = 1f;    // 0..1 tiến độ vươn tới điểm nắm
             [NonSerialized] public Vector2 reachFrom;   // world: chóp đoạn duỗi lúc bắt đầu vươn
-            [NonSerialized] public Vector2 grip;        // world: điểm đang nắm khi bám đá
-            [NonSerialized] public bool gripping;
             [NonSerialized] public float planted;       // 0..1: đoạn tới chân theo đúng nghiệm IK (đứng trên đất)
             [NonSerialized] public float bindSignature;
             [NonSerialized] public bool locked;         // khoá chân: chóp đang bám được giữ đứng yên trên đất
             [NonSerialized] public float lockGround;    // vị trí chóp đang khoá, đo dọc mặt đất (unit tranh)
+            [NonSerialized] public Vector2 ik2;         // IK đoạn gốc khi bò kiểu sâu đo
+            [NonSerialized] public int exactUpTo;       // xương tới đây theo đúng đích (không lò xo) khi đứng trên đất
+            [NonSerialized] public bool exactPath;      // đang bò kiểu sâu đo / rắn: cả xúc tu theo đúng đường vẽ sẵn
+            [NonSerialized] public int contactJoint = -1; // khớp đang chạm đất khi theo đường (-1 = điểm chạm như tranh)
+            [NonSerialized] public float snakePhase;    // pha sóng rắn chạy dọc xúc tu (radian)
+            [NonSerialized] public float swapBlend;     // vừa đổi hướng: chuyển dáng mượt trong chốc lát
+            [NonSerialized] public float[] restTargets, restSpacing;
             [NonSerialized] public float release;       // độ lệch còn lại sau khi mở khoá, giảm dần về 0
+            [NonSerialized] public float[] actAngles, actSpacing;     // dáng đòn đang tính (góc tuyệt đối trong khung "quay phải")
+            [NonSerialized] public float[] blendAngles, blendSpacing; // chuyển dáng: lệch giữa dáng đang hiện và dáng mới, giảm dần về 0
+            [NonSerialized] public float blendTime, blendLength;
+            [NonSerialized] public bool blendPending;   // frame sau lấy độ lệch (khi đã có đích mới)
+            [NonSerialized] public bool acting;         // đang ra đòn: theo đúng dáng đòn (không qua lò xo)
+            [NonSerialized] public int actSerial;       // đòn thứ mấy xúc tu đang theo (đòn mới nối vào thì chuyển dáng)
 
             public int Count => bones.Length;
 
@@ -117,13 +131,13 @@ namespace Octopus
         {
             [Tooltip("Lệch nhịp so với hai xúc tu kia (0..1)")]
             [Range(0f, 1f)] public float phase;
-            [Tooltip("Chóp nằm cách chỗ nghỉ bao xa (unit tranh; dương = phía trước). Âm cho xúc tu sau để nó duỗi dài ra sau")]
+            [Tooltip("Chỗ xúc tu chạm đất dời đi bao xa (unit tranh; dương = phía trước)")]
             public float reach;
-            [Tooltip("Chóp trượt tới lui bao nhiêu theo nhịp (unit tranh)")]
-            public float slide = 0.06f;
-            [Tooltip("Chóp cuộn bao nhiêu (1 = như tranh, nhỏ hơn = duỗi dài sát đất)")]
-            public float curl = 0.8f;
-            [Tooltip("Độ cuộn chóp lên xuống theo nhịp")]
+            [Tooltip("Chỗ chạm đất trượt tới lui bao nhiêu theo nhịp (unit tranh)")]
+            public float slide = 0.02f;
+            [Tooltip("Chóp cong lên bao nhiêu (0 = thẳng như đuôi rắn, 1 = cong lên khoảng 60 độ)")]
+            public float curl = 0.3f;
+            [Tooltip("Độ cong chóp lên xuống theo nhịp")]
             public float curlSwing = 0.15f;
         }
 
@@ -140,6 +154,8 @@ namespace Octopus
         [Header("Kích thước")]
         [Tooltip("Phóng to cả con (vật lý không đổi). 1 = cao 1,5 unit như tranh gốc")]
         [SerializeField, Range(0.6f, 2.5f)] float size = 1.5f;
+        [Tooltip("Lật cả con khi đổi hướng. Tắt (mặc định): đầu, mắt giữ nguyên, chỉ đổi chiều các xúc tu")]
+        [SerializeField] bool flipBody;
 
         [Header("Bò")]
         [Tooltip("Thân đi được bấy nhiêu (unit tranh) trong một vòng bò (một lượt clip Crawl). Lớn = sải dài, nhịp chậm")]
@@ -151,21 +167,21 @@ namespace Octopus
         [Tooltip("Vừa tiếp đất, xúc tu chuyển từ dáng bay sang dáng bám đất trong thời gian này")]
         [SerializeField] float plantTime = 0.12f;
         [Tooltip("Hạ thấp đầu thêm khi bò (unit tranh, cộng thêm vào Idle Crouch); xúc tu tự co lại để vẫn sát đất")]
-        [SerializeField, Range(0f, 0.4f)] float crawlCrouch = 0.15f;
+        [SerializeField, Range(0f, 0.5f)] float crawlCrouch = 0.2f;
         [Tooltip("Đầu dẹt xuống một chút khi bò (0 = giữ nguyên)")]
         [SerializeField, Range(0f, 0.3f)] float crawlFlatten = 0.05f;
 
         [Header("Sóng uốn lượn trên xúc tu (tới tận ngọn)")]
         [Tooltip("Biên độ sóng khi di chuyển (độ mỗi xương ở gốc; ngọn mạnh hơn theo Wave Tip Boost)")]
-        [SerializeField, Range(0f, 20f)] float waveAmount = 9f;
+        [SerializeField, Range(0f, 25f)] float waveAmount = 13f;
         [Tooltip("Ngọn uốn mạnh gấp bao nhiêu lần gốc")]
-        [SerializeField, Range(1f, 5f)] float waveTipBoost = 1.8f;
+        [SerializeField, Range(1f, 5f)] float waveTipBoost = 2f;
         [Tooltip("Số xương trên một bước sóng (nhỏ = sóng dày, gợn nhiều)")]
-        [SerializeField, Range(3f, 20f)] float waveLength = 9f;
+        [SerializeField, Range(3f, 20f)] float waveLength = 8f;
         [Tooltip("Tốc độ sóng chạy từ gốc ra ngọn")]
-        [SerializeField, Range(0f, 20f)] float waveSpeed = 5f;
+        [SerializeField, Range(0f, 20f)] float waveSpeed = 6f;
         [Tooltip("Đứng yên thì sóng bằng bao nhiêu phần lúc di chuyển")]
-        [SerializeField, Range(0f, 1f)] float waveIdle = 0.45f;
+        [SerializeField, Range(0f, 1f)] float waveIdle = 0.3f;
 
         [Header("Vây quanh đầu lượn sóng")]
         [Tooltip("Vây lắc qua lại bao nhiêu độ khi di chuyển (0 = vây đứng yên)")]
@@ -192,11 +208,41 @@ namespace Octopus
         [SerializeField] OctopusCrawlBody crawlBody;
 
         [Header("Bò bằng code — dùng khi tắt Use Crawl Clip; nút \"Tạo lại clip bò\" cũng lấy dáng từ đây")]
-        [Tooltip("Trườn = xúc tu sát đất uốn sóng như rắn, thân lướt êm. Bước = nhấc từng xúc tu lên đặt xuống như đi bộ")]
+        [Tooltip("Trườn = cả 3 xúc tu nằm trên đất uốn lượn hình rắn. Sâu đo = hai xúc tu bên co lại thành vòm rồi vươn ra nằm thẳng. Bước = nhấc lên đặt xuống như đi bộ")]
         [SerializeField] CrawlStyle crawlStyle = CrawlStyle.Slither;
-        [Tooltip("Kiểu Trườn: 0 xúc tu trái (duỗi ra sau) · 1 giữa · 2 phải (vươn ra trước)")]
+        [Tooltip("Kiểu Trườn: khúc uốn gồ lên cao bao nhiêu (unit tranh). 0 = nằm thẳng trên đất")]
+        [SerializeField, Range(0f, 0.4f)] float snakeHeight = 0.15f;
+        [Tooltip("Trườn: một khúc sóng dài bao nhiêu (unit tranh). Nhỏ = nhiều khúc ngắn, lớn = ít khúc dài mềm")]
+        [SerializeField, Range(0.15f, 1.2f)] float snakeLength = 0.4f;
+        [Tooltip("Trườn: sóng chạy dọc xúc tu nhanh / chậm (số khúc sóng chạy qua mỗi nhịp bò). Sóng luôn chạy về phía sau như rắn")]
+        [SerializeField, Range(0f, 3f)] float snakeFlow = 1f;
+        [Tooltip("Trườn: xúc tu chạm đất ở xương thứ mấy tính từ gốc (ít nhất; tự thêm xương nếu thân ở xa mặt đất / mặt đá); từ đó ra tận ngọn nằm trên đất uốn lượn")]
+        [SerializeField, Range(2, 10)] int snakeBaseBone = 4;
+        [Tooltip("Trườn: chỗ xúc tu chạm đất cách gốc bao xa ra phía ngoài (unit tranh)")]
+        [SerializeField, Range(0f, 0.6f)] float snakeBaseOut = 0.16f;
+        [Tooltip("Trườn: trục xương cách mặt đất bấy nhiêu ở chỗ chạm đất (khoảng nửa bề dày xúc tu, unit tranh)")]
+        [SerializeField, Range(0f, 0.15f)] float snakeThickness = 0.05f;
+        [Tooltip("Trườn: xúc tu giữa vươn ra phía trước (bật) hay kéo lê phía sau cùng xúc tu sau (tắt)")]
+        [SerializeField] bool snakeMiddleForward;
+        [Tooltip("Kiểu Sâu đo — hai xúc tu bên. Xúc tu chạm đất ở xương thứ mấy tính từ gốc; từ đó ra ngọn là đoạn uốn vòm")]
+        [SerializeField, Range(2, 10)] int inchBaseBone = 5;
+        [Tooltip("Sâu đo: chỗ xúc tu chạm đất cách gốc bao xa ra phía ngoài (unit tranh)")]
+        [SerializeField, Range(0f, 0.6f)] float inchBaseOut = 0.22f;
+        [Tooltip("Sâu đo: vòm cao nhất khi chóp co về còn bấy nhiêu phần chiều dài đoạn uốn (nhỏ = vòm cao)")]
+        [SerializeField, Range(0.2f, 0.95f)] float inchArch = 0.45f;
+        [Tooltip("Sâu đo: chóp nhấc cao bao nhiêu khi vươn tới (unit tranh)")]
+        [SerializeField, Range(0f, 0.4f)] float inchLift = 0.12f;
+        [Tooltip("Sâu đo: khi vươn tới, đỉnh vòm lệch về phía gốc (0.5 = giữa, nhỏ = sát gốc)")]
+        [SerializeField, Range(0.1f, 0.9f)] float inchSkew = 0.28f;
+        [Tooltip("Sâu đo: chóp quặp xuống đất khi vòm cao (0 = thẳng, 1 = quặp hẳn)")]
+        [SerializeField, Range(0f, 1.5f)] float inchHook = 0.9f;
+        [Tooltip("Sâu đo: trục xương cách mặt đất bấy nhiêu khi xúc tu nằm sát đất (khoảng nửa bề dày xúc tu, unit tranh)")]
+        [SerializeField, Range(0f, 0.15f)] float inchThickness = 0.05f;
+        [Tooltip("Sâu đo: lệch nhịp của xúc tu phía sau so với xúc tu phía trước (0..1)")]
+        [SerializeField, Range(0f, 1f)] float inchRearPhase;
+        [Tooltip("Kiểu Trườn (và xúc tu giữa ở kiểu Sâu đo): 0 xúc tu phía sau · 1 giữa · 2 phía trước (theo hướng đang đi). Trườn: Reach / Slide dời chỗ chạm đất, Curl = chóp cong lên")]
         [SerializeField] ArmSlither[] slither = DefaultSlither();
-        [Tooltip("Kiểu Bước: 0 xúc tu trái = đẩy phía sau · 1 giữa = lăn dưới thân · 2 phải = vươn tới kéo phía trước")]
+        [Tooltip("Kiểu Bước: 0 xúc tu phía sau = đẩy · 1 giữa = lăn dưới thân · 2 phía trước = vươn tới kéo (theo hướng đang đi)")]
         [SerializeField] ArmGait[] gait = DefaultGait();
         [Tooltip("Thân chồm tới theo mỗi nhịp kéo (unit tranh)")]
         [SerializeField] float surge = 0.05f;
@@ -210,7 +256,7 @@ namespace Octopus
 
         [Header("Đứng yên")]
         [Tooltip("Hạ thấp đầu lúc đứng yên (unit tranh); xúc tu tự co lại cho vừa")]
-        [SerializeField, Range(0f, 0.4f)] float idleCrouch = 0.22f;
+        [SerializeField, Range(0f, 0.5f)] float idleCrouch = 0.27f;
         [Tooltip("Hai xúc tu bên xoè rộng ra, nằm sát đất (unit tranh)")]
         [SerializeField, Range(0f, 0.4f)] float idleSpread = 0.1f;
         [Tooltip("Đầu phồng xẹp như thở")]
@@ -251,12 +297,13 @@ namespace Octopus
         [Tooltip("Chóp cuộn chặt hơn tranh bao nhiêu khi nắm đá")]
         [SerializeField, Range(0.5f, 2f)] float holdCurl = 1.15f;
 
-        [Header("Bám đá")]
-        [Tooltip("Hai xúc tu bên nắm đá cách giữa đầu bấy nhiêu (unit tranh)")]
-        [SerializeField] float gripSpread = 0.32f;
-        [Tooltip("Thân bò ra xa điểm nắm quá mức này (unit) thì xúc tu buông ra nắm chỗ mới")]
-        [SerializeField] float regripDistance = 0.4f;
-        [SerializeField] float regripTime = 0.14f;
+        [Header("Bám ngược dưới đá")]
+        [Tooltip("Treo ngược: thân kéo sát lên đá bao nhiêu (unit tranh). 0 = xúc tu dài như tranh, âm = treo lủng lẳng xa đá hơn")]
+        [SerializeField, Range(-0.3f, 0.5f)] float clingCrouch = 0.3f;
+        [Tooltip("Treo ngược: xúc tu ép sát vào đá thêm bấy nhiêu (unit tranh) cho khỏi hở với mép đá")]
+        [SerializeField, Range(0f, 0.3f)] float clingReach = 0.03f;
+        [Tooltip("Thời gian lật ngược người khi bám vào đá / rời đá (giây)")]
+        [SerializeField, Range(0.05f, 1f)] float hangFlipTime = 0.25f;
 
         [Header("Lò xo")]
         [Tooltip("Độ cứng ở gốc xúc tu (rad/s): càng lớn càng bám dáng")]
@@ -282,6 +329,18 @@ namespace Octopus
         [Tooltip("Con ngươi luôn dựng đứng dù thân nghiêng (mắt bạch tuộc thật giữ con ngươi theo phương ngang trời)")]
         [SerializeField] bool pupilUpright = true;
 
+        [Header("Chiêu laze")]
+        [Tooltip("Vận sức thì mắt mở to thêm bao nhiêu (tỉ lệ)")]
+        [SerializeField, Range(0f, 0.4f)] float laserEyeWiden = 0.15f;
+        [Tooltip("Vận sức thì con ngươi co lại còn bấy nhiêu phần bề ngang (khe mảnh)")]
+        [SerializeField, Range(0.2f, 1f)] float laserPupilSlit = 0.55f;
+        [Tooltip("Bắn xong mắt lim dim bao lâu (giây), như mỏi mắt")]
+        [SerializeField, Range(0f, 2f)] float laserTiredTime = 0.8f;
+        [Tooltip("Đầu bị đẩy ngả ra sau khi bắn (độ)")]
+        [SerializeField, Range(0f, 20f)] float laserRecoil = 6f;
+        [Tooltip("Lúc tia bung ra, thân bẹp lại bao nhiêu (giật lùi)")]
+        [SerializeField, Range(0f, 0.5f)] float laserKick = 0.18f;
+
         [Header("Co giãn (squash & stretch)")]
         [SerializeField] float squashStiffness = 260f;
         [SerializeField] float squashDamping = 13f;
@@ -298,8 +357,6 @@ namespace Octopus
         [SerializeField] float groundOffset = 0.5f;
         [Tooltip("Tâm thân cao bấy nhiêu tính từ chân (unit tranh; điểm xoay khi ở trên không)")]
         [SerializeField] float bodyCenter = 0.75f;
-        [Tooltip("Đỉnh đầu cao bấy nhiêu tính từ chân (unit tranh; chỗ áp vào đá khi bám)")]
-        [SerializeField] float headTop = 1.45f;
 
         [Header("Tham chiếu (đã nối sẵn, không cần sửa)")]
         [SerializeField] OctopusController controller;
@@ -322,22 +379,42 @@ namespace Octopus
 
         Rigidbody2D _rigidbody;
         bool _subscribed;
+        LaserSkill _laser;
+        CombatPose _act;              // dáng ra đòn đang diễn (bộ chiêu gọi Act)
+        ActClip _clip;
+        float _actTime, _actDuration;
+        Vector2 _actPoint;
+        float _actDir = 1f;           // hướng "phía trước" trong tranh lúc ra đòn (giữ nguyên tới hết đòn)
+        float _actFacing = 1f;        // hướng mặt (world) lúc ra đòn: chiều xoay tròn
+        int _actSerial;
+        float _actEngage;             // 0..1: đang ra đòn (đầu cứng hơn để kịp lắc theo)
+        // Thân trong đòn (toạ độ tranh): dời, ngả (độ, dương = ngược chiều kim đồng hồ), co giãn, đầu ngả, xoay tròn (world)
+        Vector2 _actShift;
+        float _actLean, _actStretch, _actNod, _actSpin, _actPivot, _actBend;
+        Vector2 _fromShift;           // lệch thân lúc đổi đòn, giảm dần về 0
+        float _fromLean, _fromStretch, _fromNod, _fromSpin, _fromPivot;
+        float _actBlendTime, _actBlendLength = 1f;
+        bool _actGround;              // đang ra đòn trên mặt đất / mặt đá: xúc tu không xuyên qua mặt
+        Vector2 _actGroundPoint, _actGroundNormal; // mặt đó trong khung đòn (Torso, lật theo hướng đòn)
         OctopusState _lastState;
         float _previewDelta;
         float _travel;
         float _wavePhase;
+        float _walkAdvance; // nhịp bò vừa đi thêm trong frame này (để sóng rắn chạy theo quãng đường)
         float _editorPhase = -1f;
+        bool _clipTool;
         float _time;
         float _squash;
         float _squashVelocity;
         float _walkPhase;
         float _walkWeight;
-        float _crawlDirection = 1f;
+        float _artDir = 1f;   // hướng đang đi trong tranh: 1 sang phải, -1 sang trái
         float _groundBlend = 1f;
         float _clingBlend;
         Vector2 _clingOffset;
         float _angle;
         float _flip = 1f;
+        float _hang = 1f;     // 1 = đứng thẳng, -1 = treo ngược dưới đá (lật dọc tranh)
         float _takeoffTimer;
         float _landTimer;
         float _landImpact;
@@ -367,9 +444,9 @@ namespace Octopus
 
         static ArmSlither[] DefaultSlither() => new[]
         {
-            new ArmSlither { phase = 0.5f, reach = -0.15f, slide = 0.07f, curl = 0.75f, curlSwing = 0.15f },
-            new ArmSlither { phase = 0.25f, reach = -0.08f, slide = 0.05f, curl = 0.9f, curlSwing = 0.2f },
-            new ArmSlither { phase = 0f, reach = 0.2f, slide = 0.08f, curl = 0.7f, curlSwing = 0.2f },
+            new ArmSlither { phase = 0.5f, reach = 0f, slide = 0.02f, curl = 0.3f, curlSwing = 0.15f },
+            new ArmSlither { phase = 0.25f, reach = 0f, slide = 0.02f, curl = 0.3f, curlSwing = 0.15f },
+            new ArmSlither { phase = 0f, reach = 0f, slide = 0.02f, curl = 0.3f, curlSwing = 0.15f },
         };
 
         static ArmGait[] DefaultGait() => new[]
@@ -395,10 +472,21 @@ namespace Octopus
         public Vector2 GrabPoint => JointWorld(limbs[GrabLimb], Mathf.Min(reachBones, limbs[GrabLimb].Count - 1));
 
         /// <summary>Điểm chạm đất của xúc tu i (0 trái, 1 giữa, 2 phải), toạ độ world.</summary>
-        public Vector2 FootPosition(int i) => torso.TransformPoint(Foot(limbs[i], limbs[i].angles, limbs[i].spacing));
+        public Vector2 FootPosition(int i) => limbs[i].contactJoint >= 0
+            ? JointWorld(limbs[i], limbs[i].contactJoint)
+            : (Vector2)torso.TransformPoint(Foot(limbs[i], limbs[i].angles, limbs[i].spacing));
 
         /// <summary>Xúc tu i đang bám đất (chóp đứng yên trong khi thân trôi qua).</summary>
         public bool FootGripping(int i) => limbs[i].footGripping;
+
+        /// <summary>Tâm con mắt (world): chỗ tia laze bắn ra.</summary>
+        public Vector2 EyePosition => eye != null ? (Vector2)eye.position : (Vector2)transform.position;
+
+        /// <summary>Khớp j (0 = gốc, Count = chóp) của xúc tu i, toạ độ world.</summary>
+        public Vector2 JointPosition(int i, int j) => JointWorld(limbs[i], j);
+
+        /// <summary>Hướng đang đi trong tranh: 1 sang phải, -1 sang trái.</summary>
+        public float ArtDirection => _artDir;
 
         /// <summary>Chóp xúc tu i, toạ độ world.</summary>
         public Vector2 TipPosition(int i) => JointWorld(limbs[i], limbs[i].Count);
@@ -412,12 +500,18 @@ namespace Octopus
         /// <summary>Editor gán: cửa sổ Animation đang xem trước / ghi clip (AnimationMode). Khi đó tay cầm do cửa sổ Animation đặt.</summary>
         public static Func<bool> EditorAnimationModeActive;
 
-        /// <summary>Đang dùng clip bò (Crawl.anim) và đủ tay cầm.</summary>
-        public bool UsesCrawlClip
+        /// <summary>
+        /// Dáng bò đang lấy từ clip Crawl.anim: chỉ khi clip đã được sửa tay (bảng ⚡ / cửa sổ Animation), hoặc đang mở
+        /// công cụ chỉnh clip. Clip chưa sửa tay thì dùng thẳng các ô "Bò bằng code" để chỉnh là thấy ngay.
+        /// </summary>
+        public bool UsesCrawlClip => HasCrawlClip && (crawlCurves.handEdited || _clipTool);
+
+        /// <summary>Có clip bò + đủ tay cầm (để các công cụ chỉnh clip làm việc).</summary>
+        public bool HasCrawlClip
         {
             get
             {
-                if (!useCrawlClip || crawlBody == null || crawlFeet == null || crawlFeet.Length != 3)
+                if (!useCrawlClip || crawlCurves == null || crawlBody == null || crawlFeet == null || crawlFeet.Length != 3)
                     return false;
                 foreach (OctopusCrawlFoot foot in crawlFeet)
                 {
@@ -449,6 +543,10 @@ namespace Octopus
             if (!HasReferences)
                 return 0f;
             EnsureRuntime();
+            if (crawlStyle == CrawlStyle.Inchworm && limbs[i].side != 0f)
+                return inchThickness; // tay cầm = chóp xúc tu, trục xương cao bằng nửa bề dày
+            if (crawlStyle == CrawlStyle.Slither)
+                return snakeThickness; // tay cầm = chỗ xúc tu chạm đất
             float y = limbs[i].home.y;
             return limbs[i].side != 0f ? Mathf.Lerp(y, 0f, plantSideTentacles) : y;
         }
@@ -498,6 +596,9 @@ namespace Octopus
             controller.Swing.Released += OnReleased;
             _lastState = controller.State;
             _flip = controller.Facing;
+            _laser = controller.GetComponent<LaserSkill>();
+            if (_laser != null)
+                _laser.PhaseChanged += OnLaserPhase;
             _subscribed = true;
         }
 
@@ -508,6 +609,8 @@ namespace Octopus
 
             controller.StateChanged -= OnStateChanged;
             controller.Jumped -= OnJumped;
+            if (_laser != null)
+                _laser.PhaseChanged -= OnLaserPhase;
             if (controller.Swing != null)
             {
                 controller.Swing.Attached -= OnAttached;
@@ -529,8 +632,9 @@ namespace Octopus
             _previewDelta = 0f;
             bool live = dt > 0f; // thời gian có trôi (Play hoặc đang ▶ Chạy thử), không thì là ảnh tĩnh của ô xem trước
             // Cửa sổ Animation đang xem / ghi clip: tay cầm do nó đặt, rig chỉ việc bò theo
-            bool animationWindow = !playing && UsesCrawlClip && EditorAnimationModeActive != null && EditorAnimationModeActive();
-            bool crawlPanel = !playing && !live && UsesCrawlClip && _editorPhase >= 0f;
+            bool animationWindow = !playing && HasCrawlClip && EditorAnimationModeActive != null && EditorAnimationModeActive();
+            bool crawlPanel = !playing && !live && HasCrawlClip && _editorPhase >= 0f;
+            _clipTool = animationWindow || crawlPanel; // đang mở công cụ chỉnh clip: xem đúng clip
             Snapshot snap = playing ? Capture() : PreviewSnapshot(animationWindow || crawlPanel);
             _mode = snap.Mode;
             _time = live ? _time + dt : previewTime * 6f;
@@ -538,7 +642,8 @@ namespace Octopus
             UpdateTimers(dt);
             UpdateSquash(dt);
             UpdateBlend(snap, dt, live);
-            if (snap.Mode == Mode.Ground && UsesCrawlClip && !animationWindow && crawlCurves != null)
+            UpdateAct(dt, live);
+            if (OnSurface(snap.Mode) && UsesCrawlClip && !animationWindow && crawlCurves != null)
                 crawlCurves.Sample(transform, _walkPhase * Mathf.Max(crawlCurves.length, 0.01f));
 
             Vector2 torsoOffset = TorsoOffset(snap);
@@ -551,6 +656,7 @@ namespace Octopus
             _wavePhase = live ? _wavePhase + dt * waveSpeed * Mathf.Lerp(0.6f, 1f, motion) : _time * waveSpeed;
             if (driveBones)
             {
+                PrepareActGround(snap);
                 for (int i = 0; i < limbs.Length; i++)
                 {
                     Limb limb = limbs[i];
@@ -558,7 +664,9 @@ namespace Octopus
                     UpdateWave(limb, i, motion);
                     switch (snap.Mode)
                     {
+                        // Trên sàn, hoặc treo ngược dưới đá (tranh lật dọc nên mặt đá là "mặt đất" của tranh): cùng một kiểu bò
                         case Mode.Ground:
+                        case Mode.Cling:
                             limb.reaching = false;
                             limb.planted = live ? Mathf.MoveTowards(limb.planted, 1f, dt / Mathf.Max(plantTime, 0.01f)) : 1f;
                             GroundTargets(limb, i, torsoOffset, dt, live);
@@ -568,30 +676,27 @@ namespace Octopus
                             ReachTargets(limb, snap.Anchor, dt, shootDuration, holdCurl);
                             break;
 
-                        case Mode.Cling when i != GrabLimb:
-                            ClingTargets(limb, snap, dt);
-                            break;
-
                         default:
                             limb.reaching = false;
-                            AirTargets(limb, i, snap.Mode == Mode.Cling ? Vector2.zero : artVelocity);
+                            AirTargets(limb, i, artVelocity);
                             break;
                     }
 
-                    if (snap.Mode != Mode.Cling)
-                        limb.gripping = false;
-                    if (snap.Mode != Mode.Ground)
+                    if (!OnSurface(snap.Mode))
                         limb.planted = 0f;
 
+                    ActLimb(limb, i, snap.Mode, dt, live);
                     Integrate(limb, dt, !live, rootStiffness, tipStiffness, damping);
                     Apply(limb);
                 }
 
                 MantleTargets(snap, artVelocity);
-                Integrate(mantle, dt, !live, mantleStiffness, mantleStiffness * 0.8f, mantleDamping);
+                // Ra đòn: đầu cứng hơn để kịp ngả theo nhịp đòn (vẫn trễ, nảy sau thân)
+                float headStiffness = mantleStiffness * (1f + 1.2f * _actEngage);
+                Integrate(mantle, dt, !live, headStiffness, headStiffness * 0.8f, mantleDamping);
                 Apply(mantle);
-                float breath = Mathf.Sin(_time * breathSpeed) * breathAmount * (snap.Mode == Mode.Ground ? 1f : 0.4f);
-                float flat = snap.Mode == Mode.Ground ? crawlFlatten * _walkWeight : 0f;
+                float breath = Mathf.Sin(_time * breathSpeed) * breathAmount * (OnSurface(snap.Mode) ? 1f : 0.4f);
+                float flat = OnSurface(snap.Mode) ? crawlFlatten * _walkWeight : 0f;
                 mantle.bones[Mathf.Min(1, mantle.Count - 1)].localScale =
                     new Vector3(1f + breath * 0.6f + flat * 0.5f, 1f + breath - flat, 1f);
                 ApplyFins(motion);
@@ -600,7 +705,7 @@ namespace Octopus
             UpdateEye(snap, dt, live);
 
             if (glow != null)
-                glow.transform.position = snap.Position + (Vector2)(pose.rotation * Vector2.up) * (bodyCenter * size - groundOffset);
+                glow.transform.position = snap.Position + (Vector2)pose.TransformVector(Vector3.up).normalized * (bodyCenter * size - groundOffset);
             if (speedTrail != null)
             {
                 speedTrail.transform.position = snap.Position;
@@ -637,7 +742,7 @@ namespace Octopus
                     snap.ClingPoint = controller.Mover.ClingPoint;
                     snap.ClingNormal = controller.Mover.ClingNormal;
                     snap.ClingSurface = controller.Mover.ClingSurface;
-                    snap.Velocity = Vector2.zero;
+                    snap.Velocity = controller.Mover.ClingVelocity;
                     break;
                 default:
                     snap.Mode = Mode.Air;
@@ -670,9 +775,12 @@ namespace Octopus
                     snap.Velocity = new Vector2(6f, -2f);
                     break;
                 case Preview.Cling:
+                case Preview.ClingCrawl:
+                    // Treo ngược dưới một mặt đá phẳng ngay trên đầu; ClingCrawl = bò sang phải dọc mặt đá
                     snap.Mode = Mode.Cling;
                     snap.ClingNormal = Vector2.down;
                     snap.ClingPoint = snap.Position + Vector2.up * groundOffset;
+                    snap.Velocity = preview == Preview.ClingCrawl ? new Vector2(3f, 0f) : Vector2.zero;
                     break;
                 default:
                     snap.Mode = Mode.Ground;
@@ -684,23 +792,42 @@ namespace Octopus
 
         void UpdateBlend(Snapshot snap, float dt, bool live)
         {
-            float ground = snap.Mode == Mode.Ground ? 1f : 0f;
+            float ground = OnSurface(snap.Mode) ? 1f : 0f;
             float cling = snap.Mode == Mode.Cling ? 1f : 0f;
             _groundBlend = live ? Mathf.MoveTowards(_groundBlend, ground, dt * 10f) : ground;
             _clingBlend = live ? Mathf.MoveTowards(_clingBlend, cling, dt * 8f) : cling;
             if (snap.Mode == Mode.Cling)
-                _clingOffset = snap.ClingPoint - snap.Position;
+                _clingOffset = snap.ClingPoint - snap.Position - snap.ClingNormal * (clingReach * size);
 
-            // Tốc độ bò tính theo unit tranh, dấu theo hướng mặt: bò lùi thì nhịp chạy ngược, chân vẫn không trượt
-            float worldSpeed = snap.Mode == Mode.Ground ? snap.Velocity.x : 0f;
-            float artSpeed = worldSpeed * Mathf.Sign(snap.Facing) / size;
-            float walk = Mathf.Abs(worldSpeed) > crawlThreshold ? 1f : 0f;
+            // Hướng đang đi trong tranh: không lật thân thì tranh trùng world (sang trái là -1); lật thân thì luôn "tới trước".
+            // Bám đá: trục x của tranh nằm dọc mặt đá; vuốt sang phải là đi theo hướng "sang phải" của mặt đá
+            float facing = Mathf.Sign(snap.Facing);
+            float artDir = snap.Mode == Mode.Cling
+                ? facing * Mathf.Sign(Vector2.Dot(ClingArtAxis(snap.ClingNormal), SurfaceMover.SurfaceTangent(snap.ClingNormal)) + 1e-4f)
+                : flipBody ? 1f : facing;
+            if (artDir != _artDir)
+            {
+                foreach (Limb limb in limbs)
+                    limb.swapBlend = 0.2f; // đổi vai trò xúc tu trước / sau: chuyển dáng mượt
+            }
+
+            _artDir = artDir;
+
+            // Tốc độ bò (unit tranh): dương khi đi theo hướng mặt; nhịp bò theo quãng đường nên chân không trượt
+            float artVelocity = snap.Mode switch
+            {
+                Mode.Ground => flipBody ? snap.Velocity.x * facing : snap.Velocity.x,
+                Mode.Cling => Vector2.Dot(snap.Velocity, ClingArtAxis(snap.ClingNormal)),
+                _ => 0f,
+            };
+            float artSpeed = artVelocity * _artDir / size;
+            float walk = Mathf.Abs(artVelocity) > crawlThreshold ? 1f : 0f;
             _walkWeight = live ? Mathf.MoveTowards(_walkWeight, walk, dt * 6f) : walk;
-            if (Mathf.Abs(artSpeed) > 0.01f)
-                _crawlDirection = Mathf.Sign(artSpeed);
-            _walkPhase = live ? Mathf.Repeat(_walkPhase + artSpeed * dt / cycleDistance, 1f) : _editorPhase >= 0f ? _editorPhase : previewTime;
+
+            _walkAdvance = live ? artSpeed * dt / cycleDistance : 0f;
+            _walkPhase = live ? Mathf.Repeat(_walkPhase + _walkAdvance, 1f) : _editorPhase >= 0f ? _editorPhase : previewTime;
             if (live)
-                _travel += artSpeed * dt;
+                _travel += artVelocity / size * dt;
         }
 
         ArmGait Gait(int index) => gait != null && gait.Length > 0 ? gait[Mathf.Min(index, gait.Length - 1)] : DefaultGait()[index];
@@ -709,23 +836,25 @@ namespace Octopus
 
         Vector2 TorsoOffset(Snapshot snap)
         {
-            var offset = Vector2.zero;
-            if (snap.Mode != Mode.Ground)
+            // Ra đòn: thân lùi lấy đà, chồm tới, nhổm lên / hạ xuống (xúc tu đang bám đất tự co duỗi theo)
+            Vector2 offset = _actShift;
+            if (!OnSurface(snap.Mode))
                 return offset;
 
             if (UsesCrawlClip)
             {
-                // Tay cầm thân trong clip: chồm tới / lùi lại, nhấp nhô
-                offset = (Vector2)crawlBody.transform.localPosition * _walkWeight;
+                // Tay cầm thân trong clip (làm cho hướng sang phải): chồm tới / lùi lại, nhấp nhô
+                Vector2 body = (Vector2)crawlBody.transform.localPosition * _walkWeight;
+                offset += new Vector2(body.x * _artDir, body.y);
             }
             else
             {
                 BodyCrawl(_walkPhase, out Vector2 body, out _);
-                offset = body * _walkWeight;
+                offset += new Vector2(body.x * _artDir, body.y) * _walkWeight;
             }
 
-            // Đầu hạ thấp lúc đứng, thấp thêm lúc bò
-            offset.y -= idleCrouch + crawlCrouch * _walkWeight;
+            // Đầu hạ thấp lúc đứng, thấp thêm lúc bò; treo ngược thì thân kéo sát lên đá theo Cling Crouch
+            offset.y -= snap.Mode == Mode.Cling ? clingCrouch : idleCrouch + crawlCrouch * _walkWeight;
             if (_landTimer > 0f)
                 offset.y -= landDip * _landImpact * Mathf.Sin(Mathf.PI * (1f - _landTimer / landTime));
             return offset;
@@ -755,29 +884,657 @@ namespace Octopus
 
             _angle = live ? Mathf.LerpAngle(_angle, target, 1f - Mathf.Exp(-rotationSmoothing * dt)) : target;
 
-            // Chỉ quay mặt khi đứng / bám (đang bay hay đu mà lật thì trông như tấm giấy lật giữa trời)
-            if (!live)
+            // Không lật thân (mặc định): đầu, mắt giữ nguyên, chỉ xúc tu đổi chiều. Lật thân: chỉ quay khi đứng / bám
+            if (!flipBody)
+                _flip = 1f;
+            else if (!live)
                 _flip = snap.Facing;
             else if (snap.Mode is Mode.Ground or Mode.Cling)
                 _flip = Mathf.MoveTowards(_flip, snap.Facing, dt * 2f / Mathf.Max(turnTime, 0.01f));
 
-            // Co giãn giữ thể tích: dài ra thì hẹp lại; lật trái / phải bằng scale âm
-            float stretch = 1f + Mathf.Max(-0.5f, _squash);
+            // Bám đá: lật ngược người (tranh lật dọc) để xúc tu bám lên đá, đầu chúc ra xa đá. Lật dần như trở mình
+            float hangTarget = snap.Mode == Mode.Cling ? -1f : 1f;
+            _hang = live ? Mathf.MoveTowards(_hang, hangTarget, dt * 2f / Mathf.Max(hangFlipTime, 0.01f)) : hangTarget;
+
+            // Co giãn giữ thể tích: dài ra thì hẹp lại; lật trái / phải, lật ngược bằng scale âm. Ra đòn cộng thêm co giãn của đòn
+            float stretch = 1f + Mathf.Max(-0.5f, _squash + _actStretch);
             float flip = Mathf.Sign(_flip) * Mathf.Max(Mathf.Abs(_flip), 0.35f);
-            var scale = new Vector2(flip / Mathf.Sqrt(stretch), stretch) * size;
+            float hang = Mathf.Sign(_hang) * Mathf.Max(Mathf.Abs(_hang), 0.35f);
+            var scale = new Vector2(flip / Mathf.Sqrt(stretch), stretch * hang) * size;
 
             // Điểm neo q (unit tranh) đặt vào vị trí at (unit world, tính từ tâm vật lý):
-            // chân khi đứng (bẹp xuống mặt đất), tâm thân khi bay / đu, đỉnh đầu khi bám đá
+            // chân khi đứng (bẹp xuống mặt đất) hoặc khi treo ngược (chân = chỗ bám trên đá), tâm thân khi bay / đu.
+            // Xoay tròn ra đòn: điểm neo chuyển dần lên tâm thân để xoay quanh tâm
             var feet = new Vector2(0f, -groundOffset);
-            Vector2 q = Vector2.Lerp(new Vector2(0f, bodyCenter), Vector2.zero, _groundBlend);
+            Vector2 q = Vector2.Lerp(Vector2.Lerp(new Vector2(0f, bodyCenter), Vector2.zero, _groundBlend), new Vector2(0f, bodyCenter), _actPivot);
             Vector2 at = feet + q * size;
-            q = Vector2.Lerp(q, new Vector2(0f, headTop), _clingBlend);
             at = Vector2.Lerp(at, _clingOffset, _clingBlend);
 
-            Quaternion rotation = Quaternion.Euler(0f, 0f, _angle);
+            // Thân ngả khi ra đòn tính trong tranh; tranh lật (scale âm) thì chiều xoay world đổi dấu
+            float lean = _actLean * Mathf.Sign(_flip) * Mathf.Sign(_hang);
+            Quaternion rotation = Quaternion.Euler(0f, 0f, _angle + _actSpin + lean);
             pose.localPosition = at - (Vector2)(rotation * Vector2.Scale(scale, q));
             pose.localRotation = rotation;
             pose.localScale = new Vector3(scale.x, scale.y, 1f);
+        }
+
+        static bool OnSurface(Mode mode) => mode is Mode.Ground or Mode.Cling;
+
+        // ---------- Ra đòn (bộ chiêu) ----------
+        //
+        // Mỗi đòn là một clip dựng bằng mốc khoá như hoạt hoạ 2D: lấy đà (xúc tu cuộn ra sau, thân ngả ngược) → ra đòn nhanh →
+        // vượt quá đích → vung theo quán tính → về dáng thường. Xúc tu tả bằng góc gốc, độ cuộn, độ quặp chóp, độ dài, sóng gợn;
+        // mỗi xương lấy dáng của thời điểm trễ hơn gốc một chút (Lag) nên khi gốc vụt đi thì chóp còn ở lại rồi mới quất theo —
+        // sóng chạy từ gốc ra chóp như roi, xúc tu cong hình chữ S. Thân: ngả, chồm, nhổm, co giãn; đầu ngả theo qua lò xo
+        // nên trễ và nảy sau thân. Mọi lần đổi dáng (vào đòn, nối đòn khi đang đánh, hết đòn) đều mượt: lấy độ lệch giữa dáng
+        // đang hiện và dáng mới rồi giảm dần về 0, dáng mới vẫn chạy đúng nhịp mà không giật. Clip làm cho hướng sang phải;
+        // quay trái thì lật gương phần xúc tu (đầu, mắt không lật — xúc tu đổi vai trước / sau).
+
+        /// <summary>Kiểu nối từ mốc khoá trước tới mốc này.</summary>
+        static class E
+        {
+            public const float S = 0f; // mượt hai đầu
+            public const float O = 1f; // bật nhanh rồi chậm dần (ra đòn)
+            public const float I = 2f; // chậm rồi nhanh dần (dồn lực nện xuống)
+            public const float L = 3f; // đều
+        }
+
+        /// <summary>
+        /// Dáng một xúc tu trong đòn, khung quay sang phải (0° = phía trước, 90° = lên trên). Mỗi đường là các bộ ba
+        /// (giây, giá trị, kiểu nối).
+        /// </summary>
+        sealed class ArmClip
+        {
+            public float[] angle;     // góc xương gốc (độ)
+            public float[] curl;      // cuộn đều mỗi xương (độ; dương = ngược chiều kim đồng hồ)
+            public float[] tip;       // quặp thêm ở nửa ngoài tới chóp (độ mỗi xương)
+            public float[] scale;     // độ dài (1 = như tranh)
+            public float[] wave;      // sóng gợn chạy dọc xúc tu (độ)
+            public float[] aim;       // 0..1: xoay cả xúc tu quanh gốc cho chóp trúng điểm nhắm
+            public bool aimStretch;   // nhắm thì kéo dài / co lại cho chóp tới đúng điểm (móc kéo)
+            public Vector2 aimShift;  // dời điểm nhắm (unit tranh; x = phía trước)
+            public float delay;       // ra đòn trễ hơn xúc tu kia bấy nhiêu giây
+        }
+
+        /// <summary>Một đòn: các xúc tu theo vai (trước / giữa / sau, null = đứng làm trụ như thường) và dáng thân.</summary>
+        sealed class ActClip
+        {
+            public float length;          // thời lượng chuẩn của các mốc (giây)
+            public float head, tail;      // đòn dài hơn chuẩn: đoạn đầu / cuối giữ nguyên nhịp, chỉ đoạn giữa giãn ra (0 = giãn đều)
+            public float blendIn = 0.05f; // nối từ dáng đang hiện sang dáng đòn trong bấy nhiêu giây
+            public float lag = 0.03f;     // chóp trễ sau gốc bấy nhiêu giây
+            public ArmClip front, middle, back;
+            public float[] lean;          // thân ngả (độ; dương = ngả ra sau)
+            public float[] shiftX, shiftY;// thân dời (unit tranh; x = phía trước)
+            public float[] stretch;       // co giãn (dương = dãn cao, âm = bẹp)
+            public float[] nod;           // đầu ngả thêm (độ; dương = ra sau), qua lò xo đầu
+            public float[] pivot;         // 0..1: điểm xoay cả người chuyển từ chân lên tâm thân
+        }
+
+        // Quất (đòn 1): xúc tu trước cuộn vòng ra sau, vươn cao sau đầu → vụt qua đầu quất xuống phía trước, chóp quất theo
+        // sau gốc → vượt quá xuống thấp, chóp cong lên → về
+        static readonly ActClip WhipClip = new ActClip
+        {
+            length = 0.34f, blendIn = 0.045f, lag = 0.035f,
+            front = new ArmClip
+            {
+                angle = new[] { 0f, -45f, E.S, 0.045f, 112f, E.S, 0.1f, -30f, E.S, 0.16f, -40f, E.S, 0.25f, -38f, E.S, 0.34f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.045f, -2f, E.S, 0.085f, 0f, E.S, 0.12f, 2f, E.S, 0.2f, 4f, E.S, 0.34f, 2f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.045f, -20f, E.S, 0.085f, 10f, E.S, 0.12f, 25f, E.S, 0.2f, 30f, E.S, 0.34f, 15f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.045f, 1.15f, E.S, 0.085f, 1.15f, E.O, 0.13f, 1.12f, E.S, 0.22f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.08f, 0f, E.S, 0.12f, 6f, E.S, 0.3f, 2f, E.S, 0.34f, 0f, E.S },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.045f, 7f, E.S, 0.1f, -9f, E.O, 0.18f, -5f, E.S, 0.34f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.045f, -0.04f, E.S, 0.1f, 0.07f, E.O, 0.2f, 0.04f, E.S, 0.34f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.045f, 0.03f, E.S, 0.1f, -0.03f, E.O, 0.34f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.045f, 0.06f, E.S, 0.09f, -0.08f, E.O, 0.15f, 0.03f, E.S, 0.25f, -0.01f, E.S, 0.34f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.045f, 12f, E.S, 0.1f, -14f, E.O, 0.2f, -4f, E.S, 0.34f, 0f, E.S },
+        };
+
+        // Quất hất (đòn 2): xúc tu giữa cuộn lại dưới thân, thân thụp xuống → vụt từ dưới lên trước mặt, thân nhổm lên ngả sau
+        static readonly ActClip WhipAltClip = new ActClip
+        {
+            length = 0.34f, blendIn = 0.045f, lag = 0.035f,
+            middle = new ArmClip
+            {
+                angle = new[] { 0f, -94f, E.S, 0.045f, -125f, E.S, 0.105f, 70f, E.S, 0.14f, 78f, E.O, 0.2f, 62f, E.S, 0.34f, -40f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.045f, 14f, E.S, 0.09f, 0f, E.S, 0.13f, -4f, E.S, 0.2f, -6f, E.S, 0.34f, 2f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.045f, 15f, E.S, 0.09f, -5f, E.S, 0.13f, -25f, E.S, 0.22f, -30f, E.S, 0.34f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.045f, 0.78f, E.S, 0.095f, 1.15f, E.O, 0.14f, 1.1f, E.S, 0.24f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.09f, 0f, E.S, 0.14f, 6f, E.S, 0.34f, 0f, E.S },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.045f, -5f, E.S, 0.1f, 8f, E.O, 0.2f, 4f, E.S, 0.34f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.045f, -0.02f, E.S, 0.1f, 0.05f, E.O, 0.34f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.045f, -0.06f, E.S, 0.1f, 0.06f, E.O, 0.2f, 0.03f, E.S, 0.34f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.045f, -0.1f, E.S, 0.1f, 0.12f, E.O, 0.18f, -0.02f, E.S, 0.34f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.045f, -8f, E.S, 0.1f, 12f, E.O, 0.22f, 3f, E.S, 0.34f, 0f, E.S },
+        };
+
+        // Nện (đòn 3): hai xúc tu (trước, giữa) giơ cao quá đầu, thân nhổm lên ngả sau → dồn lực đập xuống đất phía trước,
+        // thân bẹp xuống chúi tới → nảy nhẹ → về
+        static readonly ActClip SlamClip = new ActClip
+        {
+            length = 0.5f, blendIn = 0.14f, lag = 0.03f,
+            front = new ArmClip
+            {
+                angle = new[] { 0f, -45f, E.S, 0.16f, 92f, E.S, 0.2f, 100f, E.S, 0.25f, -28f, E.I, 0.3f, -22f, E.O, 0.36f, -28f, E.S, 0.5f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.16f, -3f, E.S, 0.2f, -4f, E.S, 0.25f, 2f, E.I, 0.36f, 2f, E.S, 0.5f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.16f, -16f, E.S, 0.2f, -22f, E.S, 0.25f, 8f, E.I, 0.3f, 18f, E.S, 0.5f, 10f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.16f, 1.12f, E.S, 0.2f, 1.08f, E.S, 0.25f, 1.12f, E.I, 0.32f, 1.05f, E.S, 0.5f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.08f, 3f, E.S, 0.2f, 3f, E.S, 0.24f, 0f, E.S, 0.28f, 6f, E.S, 0.45f, 0f, E.S },
+            },
+            middle = new ArmClip
+            {
+                delay = 0.02f,
+                angle = new[] { 0f, -94f, E.S, 0.16f, 98f, E.S, 0.2f, 106f, E.S, 0.25f, -40f, E.I, 0.3f, -34f, E.O, 0.36f, -40f, E.S, 0.5f, -94f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.16f, -3f, E.S, 0.2f, -4f, E.S, 0.25f, 2f, E.I, 0.36f, 2f, E.S, 0.5f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.16f, -16f, E.S, 0.2f, -22f, E.S, 0.25f, 8f, E.I, 0.3f, 18f, E.S, 0.5f, 10f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.16f, 1.12f, E.S, 0.2f, 1.08f, E.S, 0.25f, 1.1f, E.I, 0.32f, 1.05f, E.S, 0.5f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.08f, 3f, E.S, 0.2f, 3f, E.S, 0.24f, 0f, E.S, 0.28f, 6f, E.S, 0.45f, 0f, E.S },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.16f, 9f, E.S, 0.2f, 11f, E.S, 0.25f, -10f, E.I, 0.3f, -7f, E.S, 0.4f, -2f, E.S, 0.5f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.16f, -0.05f, E.S, 0.25f, 0.08f, E.I, 0.5f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.16f, 0.1f, E.S, 0.2f, 0.12f, E.S, 0.25f, -0.08f, E.I, 0.32f, -0.04f, E.S, 0.5f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.16f, 0.1f, E.S, 0.2f, 0.12f, E.S, 0.25f, -0.22f, E.I, 0.31f, 0.06f, E.O, 0.38f, -0.02f, E.S, 0.5f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.16f, 12f, E.S, 0.2f, 14f, E.S, 0.25f, -16f, E.I, 0.32f, -6f, E.S, 0.5f, 0f, E.S },
+        };
+
+        // Móc kéo: xúc tu trước cuộn gọn dựng lên như rắn hổ mang lấy đà → phóng thẳng như mũi tên tới điểm nhắm (kéo dài ra) → căng rung → giật mạnh về,
+        // cuộn lại, thân ngả ra sau như kéo → về
+        static readonly ActClip ReachClip = new ActClip
+        {
+            length = 0.6f, blendIn = 0.07f, lag = 0.02f,
+            front = new ArmClip
+            {
+                aimStretch = true,
+                angle = new[] { 0f, -45f, E.S, 0.075f, 95f, E.S, 0.14f, 0f, E.O, 0.26f, 0f, E.S, 0.38f, 75f, E.I, 0.48f, 45f, E.S, 0.6f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.075f, -14f, E.S, 0.14f, 0f, E.O, 0.26f, 0f, E.S, 0.38f, -10f, E.I, 0.5f, -4f, E.S, 0.6f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.075f, -10f, E.S, 0.14f, 12f, E.O, 0.26f, 12f, E.S, 0.38f, -30f, E.I, 0.6f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.075f, 0.72f, E.S, 0.14f, 1f, E.O, 0.26f, 1f, E.S, 0.38f, 0.8f, E.I, 0.5f, 0.95f, E.S, 0.6f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.14f, 0f, E.S, 0.16f, 5f, E.S, 0.26f, 2f, E.S, 0.32f, 8f, E.S, 0.45f, 3f, E.S, 0.6f, 0f, E.S },
+                aim = new[] { 0f, 0f, E.S, 0.08f, 0f, E.S, 0.14f, 1f, E.O, 0.26f, 1f, E.S, 0.36f, 0f, E.I },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.075f, 8f, E.S, 0.14f, -9f, E.O, 0.26f, -6f, E.S, 0.36f, 10f, E.I, 0.46f, 3f, E.S, 0.6f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.075f, -0.05f, E.S, 0.14f, 0.08f, E.O, 0.26f, 0.06f, E.S, 0.36f, -0.06f, E.I, 0.6f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.075f, 0.02f, E.S, 0.14f, -0.02f, E.O, 0.6f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.075f, -0.07f, E.S, 0.14f, 0.08f, E.O, 0.24f, 0.02f, E.S, 0.36f, -0.08f, E.I, 0.45f, 0.04f, E.S, 0.6f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.075f, 10f, E.S, 0.14f, -12f, E.O, 0.26f, -6f, E.S, 0.36f, 14f, E.I, 0.5f, 2f, E.S, 0.6f, 0f, E.S },
+        };
+
+        // Xoay tròn: thụp xuống, thu xúc tu, xoay ngược lấy đà → bật lên xoay tít, 3 xúc tu xoè ra như cánh quạt, chóp cong
+        // ngược chiều xoay → giảm tốc, vượt quá rồi về. Góc xoay cả người tính riêng (SpinAngle)
+        static readonly ActClip SpinClip = new ActClip
+        {
+            length = 0.6f, head = 0.16f, tail = 0.14f, blendIn = 0.07f, lag = 0.04f,
+            front = new ArmClip
+            {
+                angle = new[] { 0f, -45f, E.S, 0.08f, -75f, E.S, 0.16f, -12f, E.O, 0.46f, -12f, E.S, 0.6f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.08f, 10f, E.S, 0.16f, 1f, E.O, 0.46f, 1f, E.S, 0.6f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.08f, 15f, E.S, 0.16f, 10f, E.O, 0.46f, 10f, E.S, 0.6f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.08f, 0.85f, E.S, 0.16f, 1.12f, E.O, 0.46f, 1.12f, E.S, 0.6f, 1f, E.S },
+            },
+            middle = new ArmClip
+            {
+                angle = new[] { 0f, -94f, E.S, 0.08f, -100f, E.S, 0.16f, -90f, E.O, 0.46f, -90f, E.S, 0.6f, -94f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.08f, 10f, E.S, 0.16f, 1f, E.O, 0.46f, 1f, E.S, 0.6f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.08f, 15f, E.S, 0.16f, 10f, E.O, 0.46f, 10f, E.S, 0.6f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.08f, 0.85f, E.S, 0.16f, 1.12f, E.O, 0.46f, 1.12f, E.S, 0.6f, 1f, E.S },
+            },
+            back = new ArmClip
+            {
+                angle = new[] { 0f, -135f, E.S, 0.08f, -110f, E.S, 0.16f, -168f, E.O, 0.46f, -168f, E.S, 0.6f, -135f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.08f, -10f, E.S, 0.16f, -1f, E.O, 0.46f, -1f, E.S, 0.6f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.08f, -15f, E.S, 0.16f, -10f, E.O, 0.46f, -10f, E.S, 0.6f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.08f, 0.85f, E.S, 0.16f, 1.12f, E.O, 0.46f, 1.12f, E.S, 0.6f, 1f, E.S },
+            },
+            shiftY = new[] { 0f, 0f, E.S, 0.08f, -0.04f, E.S, 0.16f, 0.14f, E.O, 0.46f, 0.12f, E.S, 0.54f, -0.02f, E.S, 0.6f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.08f, -0.12f, E.S, 0.16f, 0.06f, E.O, 0.46f, 0.04f, E.S, 0.53f, -0.06f, E.S, 0.6f, 0f, E.S },
+            pivot = new[] { 0f, 0f, E.S, 0.06f, 0f, E.S, 0.16f, 1f, E.S, 0.46f, 1f, E.S, 0.6f, 0f, E.S },
+        };
+
+        // Chồm lên (vận sức laze lớn / kraken): thụp xuống thu xúc tu → nhổm cao, dãn người, hai xúc tu bên giơ cao toả rộng
+        // quặp chóp ra ngoài, gợn sóng đe doạ → hạ xuống. Xúc tu giữa làm trụ
+        static readonly ActClip RearClip = new ActClip
+        {
+            length = 0.75f, head = 0.3f, tail = 0.2f, blendIn = 0.12f, lag = 0.05f,
+            front = new ArmClip
+            {
+                angle = new[] { 0f, -45f, E.S, 0.12f, -70f, E.S, 0.3f, 72f, E.O, 0.55f, 66f, E.S, 0.75f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.12f, 8f, E.S, 0.3f, -5f, E.O, 0.55f, -4f, E.S, 0.75f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.12f, 15f, E.S, 0.3f, -28f, E.O, 0.55f, -24f, E.S, 0.75f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.12f, 0.85f, E.S, 0.3f, 1.15f, E.O, 0.55f, 1.1f, E.S, 0.75f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.25f, 0f, E.S, 0.35f, 7f, E.S, 0.55f, 6f, E.S, 0.75f, 0f, E.S },
+            },
+            back = new ArmClip
+            {
+                angle = new[] { 0f, -135f, E.S, 0.12f, -112f, E.S, 0.3f, -252f, E.O, 0.55f, -246f, E.S, 0.75f, -135f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.12f, -8f, E.S, 0.3f, 5f, E.O, 0.55f, 4f, E.S, 0.75f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.12f, -15f, E.S, 0.3f, 28f, E.O, 0.55f, 24f, E.S, 0.75f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.12f, 0.85f, E.S, 0.3f, 1.15f, E.O, 0.55f, 1.1f, E.S, 0.75f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.25f, 0f, E.S, 0.35f, 7f, E.S, 0.55f, 6f, E.S, 0.75f, 0f, E.S },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.12f, -5f, E.S, 0.3f, 6f, E.O, 0.55f, 4f, E.S, 0.75f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.12f, 0.03f, E.S, 0.3f, -0.03f, E.O, 0.75f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.12f, -0.08f, E.S, 0.3f, 0.2f, E.O, 0.55f, 0.17f, E.S, 0.75f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.12f, -0.12f, E.S, 0.3f, 0.16f, E.O, 0.4f, 0.08f, E.S, 0.55f, 0.1f, E.S, 0.75f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.12f, -6f, E.S, 0.3f, 12f, E.O, 0.4f, 6f, E.S, 0.55f, 8f, E.S, 0.75f, 0f, E.S },
+        };
+
+        // Co rúm phun mực: bẹp hẳn xuống, thu xúc tu dưới thân → bung dài người phóng lùi, cả 3 xúc tu duỗi về phía trước
+        // (kéo theo sau khi lùi), gợn sóng → xoè ra rồi về dáng bay
+        static readonly ActClip SquashClip = new ActClip
+        {
+            length = 0.45f, blendIn = 0.04f, lag = 0.05f,
+            front = new ArmClip
+            {
+                angle = new[] { 0f, -45f, E.S, 0.05f, -75f, E.S, 0.16f, -12f, E.O, 0.3f, -22f, E.S, 0.45f, -45f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.05f, 12f, E.S, 0.16f, 2f, E.O, 0.3f, 4f, E.S, 0.45f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.05f, 20f, E.S, 0.16f, 15f, E.S, 0.3f, 25f, E.S, 0.45f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.05f, 0.8f, E.S, 0.16f, 1.12f, E.O, 0.3f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.1f, 0f, E.S, 0.18f, 8f, E.S, 0.45f, 0f, E.S },
+            },
+            middle = new ArmClip
+            {
+                angle = new[] { 0f, -94f, E.S, 0.05f, -100f, E.S, 0.16f, -35f, E.O, 0.3f, -45f, E.S, 0.45f, -94f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.05f, 12f, E.S, 0.16f, 2f, E.O, 0.3f, 4f, E.S, 0.45f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.05f, 20f, E.S, 0.16f, 15f, E.S, 0.3f, 25f, E.S, 0.45f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.05f, 0.8f, E.S, 0.16f, 1.12f, E.O, 0.3f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.1f, 0f, E.S, 0.18f, 8f, E.S, 0.45f, 0f, E.S },
+            },
+            back = new ArmClip
+            {
+                angle = new[] { 0f, -135f, E.S, 0.05f, -115f, E.S, 0.16f, -58f, E.O, 0.3f, -68f, E.S, 0.45f, -135f, E.S },
+                curl = new[] { 0f, 0f, E.S, 0.05f, 12f, E.S, 0.16f, 2f, E.O, 0.3f, 4f, E.S, 0.45f, 0f, E.S },
+                tip = new[] { 0f, 0f, E.S, 0.05f, 20f, E.S, 0.16f, 15f, E.S, 0.3f, 25f, E.S, 0.45f, 0f, E.S },
+                scale = new[] { 0f, 1f, E.S, 0.05f, 0.8f, E.S, 0.16f, 1.12f, E.O, 0.3f, 1f, E.S },
+                wave = new[] { 0f, 0f, E.S, 0.1f, 0f, E.S, 0.18f, 8f, E.S, 0.45f, 0f, E.S },
+            },
+            lean = new[] { 0f, 0f, E.S, 0.05f, -6f, E.S, 0.16f, 14f, E.O, 0.3f, 8f, E.S, 0.45f, 0f, E.S },
+            shiftY = new[] { 0f, 0f, E.S, 0.05f, -0.06f, E.S, 0.16f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.05f, -0.3f, E.O, 0.16f, 0.22f, E.O, 0.28f, -0.04f, E.S, 0.45f, 0f, E.S },
+            nod = new[] { 0f, 0f, E.S, 0.05f, -6f, E.S, 0.16f, 16f, E.O, 0.3f, 6f, E.S, 0.45f, 0f, E.S },
+        };
+
+        // Lao tới (nhện cắn; bạch tuộc không dùng): lùi lấy đà → chúi người lao tới → về
+        static readonly ActClip LungeClip = new ActClip
+        {
+            length = 0.5f, blendIn = 0.06f,
+            lean = new[] { 0f, 0f, E.S, 0.1f, 5f, E.S, 0.25f, -14f, E.O, 0.5f, 0f, E.S },
+            shiftX = new[] { 0f, 0f, E.S, 0.1f, -0.05f, E.S, 0.25f, 0.25f, E.O, 0.5f, 0f, E.S },
+            stretch = new[] { 0f, 0f, E.S, 0.1f, -0.08f, E.S, 0.25f, 0.1f, E.O, 0.5f, 0f, E.S },
+        };
+
+        static readonly float[] SpinWind = { 0f, 0f, E.S, 0.08f, 1f, E.S, 0.18f, 0f, E.S };
+        static readonly float[] SpinOver = { 0f, 0f, E.S, 0.08f, 1f, E.O, 0.16f, 0f, E.S };
+
+        // Hết đòn: xúc tu, thân chuyển về dáng thường trong bấy nhiêu giây
+        const float ActBlendOut = 0.12f;
+        // Chuyển dáng: chóp xong muộn hơn gốc bấy nhiêu giây (sóng chạy ra chóp)
+        const float BlendLag = 0.035f;
+
+        static ActClip ClipOf(CombatPose pose) => pose switch
+        {
+            CombatPose.Whip => WhipClip,
+            CombatPose.WhipAlt => WhipAltClip,
+            CombatPose.Slam => SlamClip,
+            CombatPose.Spin => SpinClip,
+            CombatPose.Reach => ReachClip,
+            CombatPose.Rear => RearClip,
+            CombatPose.Lunge => LungeClip,
+            CombatPose.Squash => SquashClip,
+            _ => null,
+        };
+
+        /// <summary>Diễn dáng ra đòn trong duration giây; point = điểm nhắm (world) cho quất / nện / móc.</summary>
+        public void Act(CombatPose pose, float duration, Vector2 point)
+        {
+            ActClip clip = ClipOf(pose);
+            if (clip == null)
+            {
+                if (_act != CombatPose.None)
+                    EndAct();
+                return;
+            }
+
+            // Đang ra đòn khác thì nối từ dáng đang hiện (thân và xúc tu đều chuyển mượt, không giật)
+            CaptureActFrom(clip.blendIn + 0.03f);
+            _act = pose;
+            _clip = clip;
+            _actTime = 0f;
+            _actDuration = Mathf.Max(0.05f, duration);
+            _actPoint = point;
+            _actDir = _artDir;
+            _actFacing = controller != null && controller.Facing < 0f ? -1f : 1f;
+            _actSerial++;
+        }
+
+        void EndAct()
+        {
+            CaptureActFrom(ActBlendOut);
+            _act = CombatPose.None;
+            _clip = null;
+        }
+
+        // Giữ dáng thân hiện tại làm độ lệch, giảm dần về 0 trong blend giây
+        void CaptureActFrom(float blend)
+        {
+            _fromShift = _actShift;
+            _fromLean = _actLean;
+            _fromStretch = _actStretch;
+            _fromNod = _actNod;
+            _fromSpin = Mathf.DeltaAngle(0f, _actSpin);
+            _fromPivot = _actPivot;
+            _actBlendTime = 0f;
+            _actBlendLength = Mathf.Max(blend, 0.01f);
+        }
+
+        // Đồng hồ đòn theo thời lượng chuẩn của clip: đòn dài / ngắn hơn chuẩn thì đoạn giữa giãn / co, lấy đà và kết giữ nhịp
+        float ActClock()
+        {
+            float t = _actTime, d = _actDuration, length = _clip.length;
+            if (Mathf.Abs(d - length) < 1e-4f)
+                return t;
+            float head = _clip.head, tail = _clip.tail;
+            if (head + tail <= 0f || d <= head + tail + 0.02f || length <= head + tail + 0.02f)
+                return t * length / d;
+            if (t <= head)
+                return t;
+            if (t >= d - tail)
+                return length - (d - t);
+            return head + (t - head) * (length - head - tail) / (d - head - tail);
+        }
+
+        // Thân trong đòn: dời, ngả, co giãn, đầu ngả, xoay tròn — theo clip, cộng độ lệch lúc đổi đòn đang giảm dần
+        void UpdateAct(float dt, bool live)
+        {
+            if (!live || !Application.isPlaying)
+                return;
+            if (_act != CombatPose.None)
+            {
+                _actTime += dt;
+                if (_actTime >= _actDuration)
+                    EndAct();
+            }
+
+            _actEngage = Mathf.MoveTowards(_actEngage, _act != CombatPose.None ? 1f : 0f, dt * 6f);
+            Vector2 shift = Vector2.zero;
+            float lean = 0f, stretch = 0f, nod = 0f, spin = 0f, pivot = 0f, bend = 0f;
+            if (_clip != null)
+            {
+                float t = ActClock();
+                shift = new Vector2(Key(_clip.shiftX, t) * _actDir, Key(_clip.shiftY, t));
+                lean = Key(_clip.lean, t) * _actDir;
+                stretch = Key(_clip.stretch, t);
+                nod = Key(_clip.nod, t) * _actDir;
+                pivot = Key(_clip.pivot, t);
+                if (_act == CombatPose.Spin)
+                {
+                    spin = SpinAngle(_actTime);
+                    float speed = Mathf.Abs(spin - SpinAngle(_actTime - 0.02f)) / 0.02f; // độ / giây
+                    bend = Mathf.Min(speed * 0.0045f, 8f);              // xúc tu cong ngược chiều xoay như cánh chong chóng
+                    nod += _actDir * Mathf.Min(speed * 0.008f, 12f);    // đầu trễ theo
+                }
+            }
+
+            _actBlendTime += dt;
+            float from = 1f - Mathf.SmoothStep(0f, 1f, _actBlendTime / _actBlendLength);
+            _actShift = shift + _fromShift * from;
+            _actLean = lean + _fromLean * from;
+            _actStretch = stretch + _fromStretch * from;
+            _actNod = nod + _fromNod * from;
+            _actSpin = spin + _fromSpin * from;
+            _actPivot = Mathf.Clamp01(pivot + _fromPivot * from);
+            _actBend = bend;
+        }
+
+        // Xoay tròn (độ, world) tại giây t của đòn: xoay ngược lấy đà, tăng tốc, quay đều, giảm tốc vượt quá một chút rồi về
+        float SpinAngle(float t)
+        {
+            float d = _actDuration;
+            int turns = Mathf.Max(1, Mathf.RoundToInt(d / 0.5f));
+            float start = 0.08f, end = Mathf.Max(start + 0.05f, d - 0.12f);
+            float progress = Ramp(t, start, end, Mathf.Clamp(0.4f * (end - start), 0.01f, 0.16f));
+            float wind = Key(SpinWind, t);
+            float over = Key(SpinOver, t - (d - 0.16f));
+            return -_actFacing * (360f * turns * progress + 18f * over - 25f * wind);
+        }
+
+        // 0 → 1 từ giây a tới b: tăng tốc đều trong ramp giây, chạy đều, giảm tốc đều trong ramp giây cuối
+        static float Ramp(float t, float a, float b, float ramp)
+        {
+            float span = b - a, x = t - a;
+            if (x <= 0f)
+                return 0f;
+            if (x >= span)
+                return 1f;
+            ramp = Mathf.Min(ramp, span * 0.5f);
+            float v = 1f / (span - ramp);
+            if (x < ramp)
+                return v * x * x / (2f * ramp);
+            if (x > span - ramp)
+                return 1f - v * (span - x) * (span - x) / (2f * ramp);
+            return v * (x - ramp * 0.5f);
+        }
+
+        // Clip của xúc tu index trong đòn đang diễn (null = đứng làm trụ như thường)
+        ArmClip ArmFor(int index, Mode mode)
+        {
+            if (_clip == null)
+                return null;
+            int front = _actDir > 0f ? 2 : 0;
+            if (mode == Mode.Swing)
+            {
+                if (index == GrabLimb)
+                    return null; // xúc tu giữa đang nắm đá
+                if (index == 2 - front && _clip.front == null && _clip.back == null)
+                    return _clip.middle; // đòn của xúc tu giữa: xúc tu sau đánh thay
+            }
+
+            return index == front ? _clip.front : index == 1 ? _clip.middle : _clip.back;
+        }
+
+        // Xúc tu có vai trong đòn thì theo dáng đòn; đổi cách điều khiển (vào đòn, nối đòn, hết đòn) thì chuyển dáng mượt
+        void ActLimb(Limb limb, int index, Mode mode, float dt, bool live)
+        {
+            if (!live || !Application.isPlaying)
+                return;
+
+            ArmClip arm = _act != CombatPose.None ? ArmFor(index, mode) : null;
+            bool acting = arm != null;
+            if (acting)
+            {
+                ArmPose(limb, arm);
+                limb.footGripping = false;
+            }
+
+            if (acting != limb.acting || (acting && limb.actSerial != _actSerial))
+            {
+                limb.blendPending = true;
+                limb.blendLength = acting ? _clip.blendIn : ActBlendOut;
+            }
+
+            limb.acting = acting;
+            limb.actSerial = _actSerial;
+            BlendLimb(limb, dt);
+        }
+
+        // Dáng đòn của một xúc tu → đích từng xương. Tính trong khung quay phải (góc tuyệt đối trong Torso), mỗi xương lấy
+        // dáng ở thời điểm trễ hơn gốc lag·i/(n-1) giây; xong nhắm điểm, tránh xuyên mặt đất, rồi lật gương nếu quay trái
+        void ArmPose(Limb limb, ArmClip arm)
+        {
+            int n = limb.Count;
+            float t = ActClock();
+            float[] abs = limb.actAngles;
+            float tipSum = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float s = n > 1 ? (float)i / (n - 1) : 0f;
+                float tau = t - arm.delay - _clip.lag * s;
+                if (i > 0)
+                    tipSum += Mathf.SmoothStep(0f, 1f, (s - 0.35f) / 0.65f);
+                float wave = Key(arm.wave, tau) * Mathf.Lerp(0.3f, 1f, s) * Mathf.Sin(_time * 14f - i * 0.75f);
+                abs[i] = Key(arm.angle, tau) + (Key(arm.curl, tau) + _actBend) * i + Key(arm.tip, tau) * tipSum + wave;
+                limb.actSpacing[i] = limb.bindLengths[i] * Key(arm.scale, tau, 1f);
+            }
+
+            var root = new Vector2(limb.root.x * _actDir, limb.root.y);
+            float aim = Key(arm.aim, t - arm.delay);
+            if (aim > 0f)
+                AimArm(limb, arm, root, aim);
+            if (_actGround)
+                ClampToGround(limb, root);
+
+            for (int i = 0; i < n; i++)
+            {
+                float local = i == 0 ? abs[0] : abs[i] - abs[i - 1];
+                if (_actDir < 0f)
+                    local = i == 0 ? 180f - local : -local;
+                limb.targets[i] = Mathf.DeltaAngle(0f, local);
+                limb.spacingTargets[i] = limb.actSpacing[i];
+            }
+        }
+
+        // Xoay cả xúc tu quanh gốc (và kéo dài / co lại nếu aimStretch) cho chóp trúng điểm nhắm; weight 0..1
+        void AimArm(Limb limb, ArmClip arm, Vector2 root, float weight)
+        {
+            int n = limb.Count;
+            Vector2 point = torso.InverseTransformPoint(_actPoint);
+            Vector2 want = new Vector2(point.x * _actDir, point.y) + arm.aimShift - root;
+            Vector2 end = root;
+            for (int i = 0; i < n; i++)
+                end += Dir(limb.actAngles[i]) * limb.actSpacing[i];
+            Vector2 have = end - root;
+            if (have.sqrMagnitude < 1e-6f || want.sqrMagnitude < 1e-6f)
+                return;
+
+            float turn = Mathf.DeltaAngle(Mathf.Atan2(have.y, have.x) * Mathf.Rad2Deg, Mathf.Atan2(want.y, want.x) * Mathf.Rad2Deg) * weight;
+            float grow = arm.aimStretch ? Mathf.Lerp(1f, Mathf.Clamp(want.magnitude / have.magnitude, 0.6f, 5f), weight) : 1f;
+            for (int i = 0; i < n; i++)
+            {
+                limb.actAngles[i] += turn;
+                limb.actSpacing[i] *= grow;
+            }
+        }
+
+        // Mặt đất / mặt đá dưới thân trong khung đòn (Torso, lật theo hướng đòn), để xúc tu ra đòn không xuyên qua
+        void PrepareActGround(Snapshot snap)
+        {
+            _actGround = _act != CombatPose.None && Application.isPlaying && OnSurface(snap.Mode);
+            if (!_actGround)
+                return;
+
+            bool cling = snap.Mode == Mode.Cling;
+            Vector2 surface = cling ? snap.ClingPoint : snap.Position + Vector2.down * groundOffset;
+            Vector2 up = cling ? snap.ClingNormal : Vector2.up;
+            Vector2 p = torso.InverseTransformPoint(surface);
+            Vector2 along = torso.InverseTransformVector(new Vector2(up.y, -up.x));
+            Vector2 normal = new Vector2(-along.y, along.x).normalized;
+            Vector2 above = (Vector2)torso.InverseTransformPoint(surface + up) - p;
+            if (Vector2.Dot(above, normal) < 0f)
+                normal = -normal;
+            _actGroundPoint = new Vector2(p.x * _actDir, p.y);
+            _actGroundNormal = new Vector2(normal.x * _actDir, normal.y);
+        }
+
+        // Xương nào chúi xuống dưới mặt thì nằm rạp theo mặt (khớp cuối của nó vừa chạm mặt), các xương sau giữ dáng
+        void ClampToGround(Limb limb, Vector2 root)
+        {
+            int n = limb.Count;
+            float lift = snakeThickness * 0.8f;
+            float beta = Mathf.Atan2(_actGroundNormal.y, _actGroundNormal.x) * Mathf.Rad2Deg;
+            Vector2 p = root;
+            float previous = 0f; // hướng xương trước (xương gốc: phía trước)
+            for (int i = 0; i < n; i++)
+            {
+                float length = limb.actSpacing[i];
+                float a = limb.actAngles[i];
+                float h = Vector2.Dot(p - _actGroundPoint, _actGroundNormal);
+                if (length > 1e-5f && h + length * Vector2.Dot(Dir(a), _actGroundNormal) < lift)
+                {
+                    float spread = Mathf.Acos(Mathf.Clamp((lift - h) / length, -1f, 1f)) * Mathf.Rad2Deg;
+                    float c1 = beta + spread, c2 = beta - spread;
+                    float s1 = Mathf.Abs(Mathf.DeltaAngle(c1, a)) + 0.3f * Mathf.Abs(Mathf.DeltaAngle(c1, previous));
+                    float s2 = Mathf.Abs(Mathf.DeltaAngle(c2, a)) + 0.3f * Mathf.Abs(Mathf.DeltaAngle(c2, previous));
+                    a += Mathf.DeltaAngle(a, s1 <= s2 ? c1 : c2);
+                    limb.actAngles[i] = a;
+                }
+
+                p += Dir(a) * length;
+                previous = a;
+            }
+        }
+
+        // Chuyển dáng mượt: lần đầu sau khi đổi cách điều khiển, lấy độ lệch giữa dáng đang hiện và đích mới; sau đó cộng
+        // độ lệch đó vào đích, giảm dần về 0 (gốc xong trước, chóp xong sau)
+        static void BlendLimb(Limb limb, float dt)
+        {
+            int n = limb.Count;
+            if (limb.blendPending)
+            {
+                limb.blendPending = false;
+                limb.blendTime = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    limb.blendAngles[i] = Mathf.DeltaAngle(limb.targets[i], limb.angles[i]);
+                    limb.blendSpacing[i] = limb.spacing[i] - limb.spacingTargets[i];
+                }
+            }
+
+            if (limb.blendTime >= limb.blendLength + BlendLag)
+                return;
+            float length = Mathf.Max(limb.blendLength, 1e-3f);
+            for (int i = 0; i < n; i++)
+            {
+                float s = n > 1 ? (float)i / (n - 1) : 0f;
+                float w = 1f - Mathf.SmoothStep(0f, 1f, (limb.blendTime - BlendLag * s) / length);
+                limb.targets[i] += limb.blendAngles[i] * w;
+                limb.spacingTargets[i] += limb.blendSpacing[i] * w;
+            }
+
+            limb.blendTime += dt;
+        }
+
+        // Giá trị đường mốc khoá (bộ ba: giây, giá trị, kiểu nối từ mốc trước) tại t; trước mốc đầu / sau mốc cuối giữ nguyên
+        static float Key(float[] keys, float t, float fallback = 0f)
+        {
+            if (keys == null || keys.Length < 3)
+                return fallback;
+            if (t <= keys[0])
+                return keys[1];
+            for (int i = 3; i < keys.Length; i += 3)
+            {
+                if (t > keys[i])
+                    continue;
+                float u = (t - keys[i - 3]) / Mathf.Max(keys[i] - keys[i - 3], 1e-5f);
+                return Mathf.LerpUnclamped(keys[i - 2], keys[i + 1], Ease(u, keys[i + 2]));
+            }
+
+            return keys[keys.Length - 2];
+        }
+
+        static float Ease(float u, float kind)
+        {
+            switch ((int)kind)
+            {
+                case 1:
+                {
+                    float v = 1f - u;
+                    return 1f - v * v * v;
+                }
+                case 2:
+                    return u * u;
+                case 3:
+                    return u;
+                default:
+                    return u * u * (3f - 2f * u);
+            }
+        }
+
+        // Trục x của tranh (world) khi treo ngược dưới mặt đá có pháp tuyến normal (đúng góc xoay Pose lúc bám)
+        static Vector2 ClingArtAxis(Vector2 normal)
+        {
+            float angle = Mathf.Atan2(-normal.y, -normal.x) * Mathf.Rad2Deg - 90f;
+            return Quaternion.Euler(0f, 0f, angle) * Vector2.right;
         }
 
         // Vector world → hướng trong tranh (bỏ xoay và lật của Pose), giữ độ lớn
@@ -785,30 +1542,72 @@ namespace Octopus
         {
             Vector2 art = Quaternion.Euler(0f, 0f, -_angle) * world;
             art.x *= Mathf.Sign(_flip);
+            art.y *= Mathf.Sign(_hang);
             return art;
         }
 
         // ---------- Xúc tu: tính góc đích ----------
 
-        // Trên đất: chóp mỗi xúc tu theo tay cầm của clip bò (hoặc nhịp ArmGait khi bò bằng code); giải IK cho điểm chạm đất
+        // Trên đất: chóp mỗi xúc tu theo tay cầm của clip bò (hoặc thông số Bò bằng code); giải IK cho điểm chạm đất.
+        // Kiểu trườn: cả 3 xúc tu nằm trên đất uốn lượn hình rắn. Kiểu sâu đo: hai xúc tu bên đi theo dáng vòm.
+        // Hai kiểu này trộn với dáng nghỉ theo mức đang bò
         void GroundTargets(Limb limb, int index, Vector2 torsoOffset, float dt, bool live)
+        {
+            bool snake = crawlStyle == CrawlStyle.Slither;
+            bool inchSide = crawlStyle == CrawlStyle.Inchworm && limb.side != 0f;
+            RestTargets(limb, index, torsoOffset, dt, live, inchSide || snake);
+            limb.exactUpTo = limb.footBone;
+            limb.exactPath = false;
+            limb.contactJoint = -1;
+            if (!(snake || inchSide) || _walkWeight <= 0f)
+                return;
+
+            Array.Copy(limb.targets, limb.restTargets, limb.Count);
+            Array.Copy(limb.spacingTargets, limb.restSpacing, limb.Count);
+            if (snake)
+                SnakeTargets(limb, index, torsoOffset, dt, live);
+            else
+                InchTargets(limb, index, torsoOffset, dt, live);
+            for (int i = 0; i < limb.Count; i++)
+            {
+                limb.targets[i] = Mathf.LerpAngle(limb.restTargets[i], limb.targets[i], _walkWeight);
+                limb.spacingTargets[i] = Mathf.Lerp(limb.restSpacing[i], limb.spacingTargets[i], _walkWeight);
+            }
+
+            limb.exactPath = true;
+            limb.exactUpTo = limb.Count - 1;
+            limb.contactJoint = snake ? SnakeBase(limb) : InchBase(limb);
+        }
+
+        // Dáng nghỉ / bước: IK cho điểm chạm đất (restOnly: chỉ dáng nghỉ, để trộn với dáng rắn / sâu đo)
+        void RestTargets(Limb limb, int index, Vector2 torsoOffset, float dt, bool live, bool restOnly)
         {
             float idle = 1f - _walkWeight;
             float restCurl = 1f + idleCurl * Mathf.Sin(_time * 0.8f + index * 2.1f);
             Vector2 foot;
             float curl;
             bool gripping;
-            if (UsesCrawlClip)
+            if (restOnly)
             {
-                OctopusCrawlFoot handle = crawlFeet[index];
-                foot = Vector2.Lerp(RestFoot(limb), handle.transform.localPosition, _walkWeight);
+                foot = RestFoot(limb);
+                curl = restCurl;
+                gripping = false;
+            }
+            else if (UsesCrawlClip)
+            {
+                // Clip làm cho hướng sang phải; đi sang trái thì xúc tu đổi vai: đọc tay cầm bên kia, lật gương
+                int source = _artDir > 0f ? index : 2 - index;
+                OctopusCrawlFoot handle = crawlFeet[source];
+                Vector2 offset = (Vector2)handle.transform.localPosition - RestFoot(limbs[source]);
+                offset.x *= _artDir;
+                foot = RestFoot(limb) + offset * _walkWeight;
                 curl = Mathf.Lerp(restCurl, handle.curl, _walkWeight);
                 gripping = handle.contact >= 0.5f;
                 foot.x = FootLock(limb, foot.x, footLock && live && gripping && _walkWeight > 0.5f, dt);
             }
             else
             {
-                CrawlStep(index, _walkPhase, out Vector2 step, out curl, out gripping);
+                CrawlStep(index, _walkPhase, _artDir, out Vector2 step, out curl, out gripping);
                 foot = RestFoot(limb) + step * _walkWeight;
                 curl = Mathf.Lerp(restCurl, curl, _walkWeight);
             }
@@ -836,6 +1635,343 @@ namespace Octopus
             }
         }
 
+        // ---------- Trườn hình rắn ----------
+
+        // Khớp chạm đất: ít nhất Snake Base Bone, thêm xương nếu đoạn gốc không đủ dài để với từ gốc tới mặt đất / mặt đá
+        // (treo ngược dưới đá thì thân ở xa đá hơn nên cần nhiều xương hơn). Tính theo dáng đích nên không nhảy khi đang bò
+        int SnakeBase(Limb limb)
+        {
+            float crouch = _mode == Mode.Cling ? clingCrouch : idleCrouch + crawlCrouch;
+            float rise = Mathf.Max(limb.root.y - crouch - snakeThickness, 0f);
+            float across = snakeBaseOut * (limb.side != 0f ? 1f : 0.5f);
+            float needed = Mathf.Sqrt(rise * rise + across * across) * SnakeSlack;
+            int last = limb.Count - 3;
+            int kb = Mathf.Clamp(snakeBaseBone, 2, last);
+            float length = 0f;
+            for (int i = 0; i < kb; i++)
+                length += limb.bindLengths[i];
+            while (length < needed && kb < last)
+                length += limb.bindLengths[kb++];
+            return kb;
+        }
+
+        // Đoạn gốc dài hơn khoảng cách gốc → chỗ chạm đất bấy nhiêu lần để cong mềm chứ không thẳng đơ
+        const float SnakeSlack = 1.06f;
+
+        // Hướng đoạn nằm trên đất khi đi theo hướng dir: hai xúc tu bên luôn ra phía ngoài; xúc tu giữa theo hướng đi
+        // (hoặc kéo lê phía sau)
+        float SnakeOutward(Limb limb, float dir) => limb.side != 0f ? -Mathf.Sign(limb.side) : dir * (snakeMiddleForward ? 1f : -1f);
+
+        // Chỗ xúc tu chạm đất (Pose) khi trườn theo hướng dir, chưa tính Reach / Slide: dưới gốc, lệch ra phía ngoài
+        // (xúc tu giữa lệch ít hơn). Tay cầm Foot L / M / R trong clip nằm đúng chỗ này
+        Vector2 SnakeBasePoint(Limb limb, float dir) =>
+            new Vector2(limb.root.x + SnakeOutward(limb, dir) * snakeBaseOut * (limb.side != 0f ? 1f : 0.5f), snakeThickness);
+
+        static readonly float[] SnakeU = new float[97], SnakeV = new float[97], SnakeS = new float[97];
+        static readonly float[] TipCurlShape = { 10f, 20f, 30f };
+
+        // Đoạn gốc hạ xuống chạm đất ở khớp SnakeBase; từ đó ra tận ngọn nằm trên đất theo đường hình sin,
+        // sóng chạy dọc xúc tu về phía sau so với hướng đi như rắn trườn
+        void SnakeTargets(Limb limb, int index, Vector2 torsoOffset, float dt, bool live)
+        {
+            int n = limb.Count;
+            int kb = SnakeBase(limb);
+            float outward = SnakeOutward(limb, _artDir);
+            Vector2 step;
+            float curl;
+            if (UsesCrawlClip)
+            {
+                // Tay cầm Foot L / M / R = chỗ chạm đất; Curl = chóp cong lên. Clip làm cho hướng sang phải,
+                // đi sang trái thì đổi vai và lật gương
+                int source = _artDir > 0f ? index : 2 - index;
+                OctopusCrawlFoot handle = crawlFeet[source];
+                step = (Vector2)handle.transform.localPosition - SnakeBasePoint(limbs[source], 1f);
+                step.x *= _artDir;
+                curl = handle.curl;
+            }
+            else
+            {
+                CrawlStep(index, _walkPhase, _artDir, out step, out curl, out _);
+            }
+
+            // Pha sóng theo quãng đường bò (dừng thì sóng dừng); xúc tu phía trước sóng chạy từ ngọn về gốc, phía sau ngược lại
+            float flow = 2f * Mathf.PI * snakeFlow * _artDir * outward;
+            limb.snakePhase = live ? Mathf.Repeat(limb.snakePhase + flow * _walkAdvance, 2f * Mathf.PI) : flow * _walkPhase;
+
+            // Đoạn gốc: IK đưa khớp kb chạm đất; co / giãn cho dài hơn khoảng cách một chút để cong mềm
+            Vector2 baseTorso = SnakeBasePoint(limb, _artDir) + step - torsoOffset;
+            float baseLength = 0f;
+            for (int i = 0; i < kb; i++)
+                baseLength += limb.bindLengths[i];
+            float stretch = Mathf.Clamp((baseTorso - limb.root).magnitude * SnakeSlack / Mathf.Max(baseLength, 0.01f), armStretch.x, armStretch.y);
+            limb.ik2 = SolveJoint(limb, baseTorso, limb.ik2, stretch, kb);
+            float absolute = 0f;
+            for (int i = 0; i < kb; i++)
+            {
+                limb.targets[i] = limb.bindAngles[i] + (i == 0 ? limb.ik2.x : limb.ik2.y) + limb.wave[i];
+                limb.spacingTargets[i] = limb.bindLengths[i] * stretch;
+                absolute += limb.targets[i];
+            }
+
+            // Đoạn trên đất: xếp từng xương dọc theo đường hình sin; vài xương cuối cong lên theo Curl
+            float length = 0f;
+            for (int j = kb; j < n; j++)
+                length += limb.bindLengths[j];
+            BuildSnake(length, limb.snakePhase + index * 2.1f);
+            float travelled = 0f;
+            int curlStart = n - TipCurlShape.Length;
+            float curlSum = 0f;
+            for (int j = kb; j < n; j++)
+            {
+                PathPoint(SnakeU, SnakeV, SnakeS, travelled, out Vector2 p0);
+                travelled += limb.bindLengths[j];
+                PathPoint(SnakeU, SnakeV, SnakeS, travelled, out Vector2 p1);
+                float direction = Mathf.Atan2(p1.y - p0.y, outward * (p1.x - p0.x)) * Mathf.Rad2Deg;
+                if (j >= curlStart)
+                    curlSum += Mathf.Max(curl, 0f) * TipCurlShape[j - curlStart];
+                float wanted = direction + outward * curlSum;
+                limb.targets[j] = Mathf.DeltaAngle(absolute, wanted);
+                absolute += limb.targets[j];
+                limb.spacingTargets[j] = limb.bindLengths[j];
+            }
+
+            limb.footTarget = baseTorso;
+            limb.footGripping = false;
+        }
+
+        // Đường trườn (u ra ngoài tính từ chỗ chạm đất, v lên trên): trục xúc tu cách đất nửa bề dày (mỏng dần ra ngọn)
+        // cộng các khúc gồ hình sin; khúc đầu lớn dần từ chỗ chạm đất cho khỏi gãy
+        void BuildSnake(float length, float phase)
+        {
+            int count = SnakeU.Length;
+            float k = 2f * Mathf.PI / Mathf.Max(snakeLength, 0.05f);
+            float ramp = Mathf.Max(snakeLength * 0.5f, 1e-3f);
+            for (int i = 0; i < count; i++)
+            {
+                float u = length * i / (count - 1);
+                float hump = 0.5f - 0.5f * Mathf.Cos(k * u + phase);
+                SnakeU[i] = u;
+                SnakeV[i] = snakeThickness * (Mathf.Lerp(1f, 0.4f, u / length) - 1f) + snakeHeight * Mathf.SmoothStep(0f, 1f, u / ramp) * hump;
+                SnakeS[i] = i == 0 ? 0f : SnakeS[i - 1] + Mathf.Sqrt(Mathf.Pow(u - SnakeU[i - 1], 2f) + Mathf.Pow(SnakeV[i] - SnakeV[i - 1], 2f));
+            }
+        }
+
+        // ---------- Sâu đo ----------
+
+        int InchBase(Limb limb) => Mathf.Clamp(inchBaseBone, 2, limb.Count - 3);
+
+        // Chỗ đoạn gốc chạm đất (trong Pose): dưới gốc, lệch ra phía ngoài
+        Vector2 InchBasePoint(Limb limb) => new Vector2(limb.root.x - limb.side * inchBaseOut, inchThickness);
+
+        float InchLength(Limb limb)
+        {
+            float length = 0f;
+            for (int i = InchBase(limb); i < limb.Count; i++)
+                length += limb.bindLengths[i];
+            return length;
+        }
+
+        // Một vòng sâu đo của xúc tu phía trước tại t (0..1), đo theo hướng ra ngoài tính từ chỗ gốc chạm đất:
+        //  bám (chóp đứng yên, thân tiến lên nên chóp lùi về gốc: thẳng → gồ → vòm cao, chóp quặp) →
+        //  nhấc chóp vươn ra trước (vòm lệch về gốc) → hạ xuống nằm thẳng. Xúc tu phía sau chạy t ngược lại.
+        void InchCycle(float t, float length, out float reach, out float height, out float peak, out float hook, out bool gripping)
+        {
+            float shortest = inchArch * length;
+            float grip = Mathf.Clamp((length - shortest) / Mathf.Max(cycleDistance, 0.01f), 0.15f, 0.85f);
+            if (t < grip)
+            {
+                float k = t / grip;
+                reach = Mathf.Lerp(length, shortest, k);
+                height = 0f;
+                peak = 0.5f;
+                hook = Mathf.Lerp(0.15f, 1f, k) * inchHook;
+                gripping = true;
+            }
+            else
+            {
+                float k = (t - grip) / (1f - grip);
+                float e = Mathf.SmoothStep(0f, 1f, k);
+                float lift = Mathf.Sin(Mathf.PI * k);
+                reach = Mathf.Lerp(shortest, length, e);
+                height = inchLift * lift;
+                peak = Mathf.Lerp(0.5f, inchSkew, lift);
+                hook = Mathf.Lerp(1f, 0.15f, e) * inchHook;
+                gripping = false;
+            }
+        }
+
+        // Pha sâu đo của xúc tu bên index khi đang đi theo hướng dir: xúc tu phía trước chạy xuôi, phía sau chạy ngược
+        float InchPhase(int index, float w, float dir)
+        {
+            bool front = limbs[index].side == -dir;
+            return front ? Mathf.Repeat(w, 1f) : 1f - Mathf.Repeat(w + inchRearPhase, 1f);
+        }
+
+        // Chóp xúc tu bên (Pose) khi bò kiểu sâu đo theo thông số, đi theo hướng dir
+        void InchTip(int index, float w, float dir, out Vector2 tip, out float peak, out float hook, out bool gripping)
+        {
+            Limb limb = limbs[index];
+            InchCycle(InchPhase(index, w, dir), InchLength(limb), out float reach, out float height, out peak, out hook, out gripping);
+            tip = InchBasePoint(limb) + new Vector2(-limb.side * reach, height);
+        }
+
+        static readonly float[] ArchU = new float[33], ArchV = new float[33], ArchS = new float[33];
+
+        void InchTargets(Limb limb, int index, Vector2 torsoOffset, float dt, bool live)
+        {
+            int n = limb.Count;
+            int kb = InchBase(limb);
+            float outward = -limb.side;
+            Vector2 basePose = InchBasePoint(limb);
+            Vector2 tip;
+            float peak, hook;
+            bool gripping;
+            if (UsesCrawlClip)
+            {
+                // Tay cầm Foot L / R = chóp xúc tu; clip làm cho hướng sang phải, đi sang trái thì đổi vai và lật gương
+                int source = _artDir > 0f ? index : 2 - index;
+                OctopusCrawlFoot handle = crawlFeet[source];
+                Vector2 offset = (Vector2)handle.transform.localPosition - InchBasePoint(limbs[source]);
+                offset.x *= _artDir;
+                tip = basePose + offset;
+                peak = handle.peak;
+                hook = handle.curl;
+                gripping = handle.contact >= 0.5f;
+                tip.x = FootLock(limb, tip.x, footLock && live && gripping && _walkWeight > 0.5f, dt);
+            }
+            else
+            {
+                InchTip(index, _walkPhase, _artDir, out tip, out peak, out hook, out gripping);
+            }
+
+            // Đoạn gốc: IK đưa khớp kb chạm đất ở chỗ gốc
+            Vector2 baseTorso = basePose - torsoOffset;
+            float baseLength = 0f;
+            for (int i = 0; i < kb; i++)
+                baseLength += limb.bindLengths[i];
+            float stretch = Mathf.Clamp((baseTorso - limb.root).magnitude / Mathf.Max(baseLength, 0.01f), armStretch.x, armStretch.y);
+            limb.ik2 = SolveJoint(limb, baseTorso, limb.ik2, stretch, kb);
+            float absolute = 0f;
+            for (int i = 0; i < kb; i++)
+            {
+                limb.targets[i] = limb.bindAngles[i] + (i == 0 ? limb.ik2.x : limb.ik2.y) + limb.wave[i];
+                limb.spacingTargets[i] = limb.bindLengths[i] * stretch;
+                absolute += limb.targets[i];
+            }
+
+            // Đoạn uốn: vòm có chiều dài cố định từ chỗ gốc chạm đất tới chóp
+            float length = InchLength(limb);
+            float reach = Mathf.Max(outward * (tip.x - basePose.x), 0.02f);
+            float height = tip.y - basePose.y;
+            float scale = ArchPath(length, reach, height, Mathf.Clamp(peak, 0.1f, 0.9f));
+            float travelled = 0f;
+            int hookStart = n - 4;
+            float hookSum = 0f;
+            for (int j = kb; j < n; j++)
+            {
+                ArchPoint(travelled, out Vector2 p0);
+                travelled += limb.bindLengths[j] * scale;
+                ArchPoint(travelled, out Vector2 p1);
+                float direction = Mathf.Atan2(p1.y - p0.y, outward * (p1.x - p0.x)) * Mathf.Rad2Deg;
+                if (j >= hookStart)
+                    hookSum += hook * HookShape[j - hookStart]; // chóp quặp xuống đất
+                float wanted = direction - outward * hookSum;
+                limb.targets[j] = Mathf.DeltaAngle(absolute, wanted) + limb.wave[j] * 0.25f;
+                absolute += limb.targets[j];
+                limb.spacingTargets[j] = limb.bindLengths[j] * scale;
+            }
+
+            limb.footTarget = baseTorso;
+            limb.footGripping = gripping && _walkWeight > 0.5f;
+        }
+
+        static readonly float[] HookShape = { 20f, 30f, 40f, 40f };
+
+        // Dựng vòm (toạ độ: u ra ngoài, v lên trên) từ (0,0) tới chóp (reach, height), đỉnh ở peak phần dây cung, dài đúng length
+        // (dây cung dài hơn length thì kéo thẳng và trả về hệ số giãn). Trả về hệ số giãn của đoạn uốn
+        float ArchPath(float length, float reach, float height, float peak)
+        {
+            float chord = Mathf.Sqrt(reach * reach + height * height);
+            float scale = 1f;
+            float bump = 0f;
+            if (chord >= length * 0.999f)
+            {
+                scale = Mathf.Min(chord / length, armStretch.y);
+            }
+            else
+            {
+                float lo = 0f, hi = length;
+                for (int it = 0; it < 18; it++)
+                {
+                    bump = 0.5f * (lo + hi);
+                    if (ArchLength(reach, height, peak, bump) > length)
+                        hi = bump;
+                    else
+                        lo = bump;
+                }
+            }
+
+            BuildArch(reach, height, peak, bump);
+            // Chuẩn hoá chiều dài bảng về đúng length × scale (vòm hoặc dây cung bị kéo)
+            float total = ArchS[ArchS.Length - 1];
+            float wanted = length * scale;
+            for (int i = 0; i < ArchS.Length; i++)
+                ArchS[i] *= wanted / Mathf.Max(total, 1e-5f);
+            return scale;
+        }
+
+        static float ArchHeight(float x, float reach, float height, float peak, float bump)
+        {
+            float xp = peak * reach;
+            float g = x < xp
+                ? Mathf.Pow(Mathf.Sin(0.5f * Mathf.PI * x / Mathf.Max(xp, 1e-5f)), 2f)
+                : Mathf.Pow(Mathf.Cos(0.5f * Mathf.PI * (x - xp) / Mathf.Max(reach - xp, 1e-5f)), 2f);
+            return height * x / Mathf.Max(reach, 1e-5f) + bump * g;
+        }
+
+        static float ArchLength(float reach, float height, float peak, float bump)
+        {
+            BuildArch(reach, height, peak, bump);
+            return ArchS[ArchS.Length - 1];
+        }
+
+        static void BuildArch(float reach, float height, float peak, float bump)
+        {
+            int count = ArchU.Length;
+            for (int i = 0; i < count; i++)
+            {
+                float x = reach * i / (count - 1);
+                ArchU[i] = x;
+                ArchV[i] = ArchHeight(x, reach, height, peak, bump);
+                ArchS[i] = i == 0 ? 0f : ArchS[i - 1] + Mathf.Sqrt(Mathf.Pow(x - ArchU[i - 1], 2f) + Mathf.Pow(ArchV[i] - ArchV[i - 1], 2f));
+            }
+        }
+
+        // Điểm trên vòm ở quãng đường s tính từ gốc (sau ArchPath); trả về chỉ số đoạn
+        static float ArchPoint(float s, out Vector2 point) => PathPoint(ArchU, ArchV, ArchS, s, out point);
+
+        // Điểm trên đường (bảng toạ độ us, vs và quãng đường cộng dồn ss) ở quãng đường s; trả về chỉ số đoạn
+        static float PathPoint(float[] us, float[] vs, float[] ss, float s, out Vector2 point)
+        {
+            int count = ss.Length;
+            for (int i = 1; i < count; i++)
+            {
+                if (s <= ss[i] || i == count - 1)
+                {
+                    float span = Mathf.Max(ss[i] - ss[i - 1], 1e-6f);
+                    float u = Mathf.Clamp01((s - ss[i - 1]) / span);
+                    // Quá cuối đường (chóp bị kéo dài hơn): đi tiếp theo hướng đoạn cuối
+                    if (s > ss[i])
+                        u = (s - ss[i - 1]) / span;
+                    point = new Vector2(Mathf.LerpUnclamped(us[i - 1], us[i], u), Mathf.LerpUnclamped(vs[i - 1], vs[i], u));
+                    return i;
+                }
+            }
+
+            point = new Vector2(us[count - 1], vs[count - 1]);
+            return count - 1;
+        }
+
         // Chỗ nghỉ của chóp xúc tu: như tranh, hai xúc tu bên hạ sát đất và xoè rộng ra
         Vector2 RestFoot(Limb limb)
         {
@@ -851,20 +1987,28 @@ namespace Octopus
 
         ArmSlither Slither(int index) => slither != null && slither.Length > 0 ? slither[Mathf.Min(index, slither.Length - 1)] : DefaultSlither()[index];
 
-        // Bò bằng code, xúc tu index tại pha chung w (0..1): chóp lệch khỏi chỗ nghỉ bao nhiêu, cuộn bao nhiêu, có bám không
-        void CrawlStep(int index, float w, out Vector2 step, out float curl, out bool gripping)
+        // Bò bằng code, xúc tu index tại pha chung w (0..1), đi theo hướng dir (1 phải, -1 trái):
+        // chóp lệch khỏi chỗ nghỉ bao nhiêu, cuộn bao nhiêu, có bám không. Thông số đặt theo vai (sau / giữa / trước)
+        void CrawlStep(int index, float w, float dir, out Vector2 step, out float curl, out bool gripping)
         {
-            if (crawlStyle == CrawlStyle.Slither)
+            int role = dir > 0f ? index : 2 - index;
+            if (crawlStyle != CrawlStyle.Step)
             {
-                // Trườn: chóp nằm sát đất, chỉ trượt nhẹ tới lui; xúc tu uốn như rắn nhờ sóng
-                ArmSlither a = Slither(index);
+                // Trườn (và xúc tu giữa ở kiểu sâu đo): chóp nằm sát đất, chỉ trượt nhẹ tới lui; xúc tu uốn như rắn nhờ sóng
+                ArmSlither a = Slither(role);
                 float angle = 2f * Mathf.PI * Mathf.Repeat(w + a.phase, 1f);
-                step = new Vector2(a.reach + a.slide * Mathf.Sin(angle), 0f);
+                step = new Vector2((a.reach + a.slide * Mathf.Sin(angle)) * dir, 0f);
                 curl = a.curl + a.curlSwing * Mathf.Sin(angle + 1.3f);
                 gripping = false;
                 return;
             }
 
+            CrawlStepStep(role, w, out step, out curl, out gripping);
+            step.x *= dir;
+        }
+
+        void CrawlStepStep(int index, float w, out Vector2 step, out float curl, out bool gripping)
+        {
             ArmGait g = Gait(index);
             float u = Mathf.Repeat(w + g.phase, 1f);
             if (u < g.grip)
@@ -975,8 +2119,9 @@ namespace Octopus
             switch (snap.Mode)
             {
                 case Mode.Ground:
+                case Mode.Cling:
                     BodyCrawl(_walkPhase, out _, out float lean);
-                    sway += _walkWeight * _crawlDirection * (UsesCrawlClip ? crawlBody.mantle : lean);
+                    sway += _walkWeight * _artDir * (UsesCrawlClip ? crawlBody.mantle : lean);
                     break;
                 case Mode.Air:
                 case Mode.Swing:
@@ -984,6 +2129,7 @@ namespace Octopus
                     break;
             }
 
+            sway += LaserSway(snap) + _actNod; // ra đòn: đầu ngả theo nhịp đòn (lò xo đầu cho trễ, nảy sau thân)
             for (int i = 0; i < mantle.Count; i++)
             {
                 mantle.targets[i] = mantle.bindAngles[i] + sway * (i == 0 ? 0.2f : 0.45f);
@@ -1011,30 +2157,6 @@ namespace Octopus
             // Đang phóng ra thì chóp duỗi thẳng như mũi tên, tới nơi mới cuộn lại quấn vào đá
             float curlNow = Mathf.Lerp(1f, 0.35f, Mathf.Sin(Mathf.PI * limb.reach)) * Mathf.Lerp(1f, curl, limb.reach);
             ArcTargets(limb, k, grab, curlNow, grabWave);
-        }
-
-        void ClingTargets(Limb limb, Snapshot snap, float dt)
-        {
-            // Điểm nắm mong muốn: hai bên đỉnh đầu, chiếu lên mặt đá
-            Vector2 desired = pose.TransformPoint(new Vector2(limb.side * -gripSpread, headTop + 0.05f));
-            if (snap.ClingSurface != null)
-                desired = snap.ClingSurface.ClosestPoint(desired);
-
-            if (!limb.gripping)
-            {
-                limb.gripping = true;
-                limb.grip = desired;
-                limb.reaching = false;
-            }
-            else if (Vector2.Distance(limb.grip, desired) > regripDistance)
-            {
-                // Buông chỗ cũ, với tới chỗ mới hơi vượt lên trước theo hướng đang bò
-                Vector2 lead = (desired - limb.grip).normalized * regripDistance * 0.5f;
-                limb.grip = snap.ClingSurface != null ? snap.ClingSurface.ClosestPoint(desired + lead) : desired + lead;
-                limb.reaching = false;
-            }
-
-            ReachTargets(limb, limb.grip, dt, regripTime, holdCurl);
         }
 
         void ArcTargets(Limb limb, int k, Vector2 grab, float curl, float wave)
@@ -1103,11 +2225,10 @@ namespace Octopus
             switch (snap.Mode)
             {
                 case Mode.Ground:
+                case Mode.Cling:
                     return _walkWeight;
                 case Mode.Swing:
                     return 1f;
-                case Mode.Cling:
-                    return 0.5f;
                 default:
                     return Mathf.Clamp01(snap.Velocity.magnitude / 6f);
             }
@@ -1158,6 +2279,32 @@ namespace Octopus
                 return;
             }
 
+            if (limb.swapBlend > 0f)
+                limb.swapBlend = Mathf.Max(0f, limb.swapBlend - dt);
+
+            if (limb.acting)
+            {
+                // Ra đòn: theo đúng dáng đòn (trễ, vượt quá, quán tính đã có sẵn trong clip; chuyển dáng đã mượt)
+                Array.Copy(limb.targets, limb.angles, n);
+                Array.Copy(limb.spacingTargets, limb.spacing, n);
+                Array.Clear(limb.velocities, 0, n);
+                return;
+            }
+
+            if (limb.exactPath && limb.planted >= 1f)
+            {
+                // Sâu đo / rắn: cả xúc tu theo đúng đường vẽ sẵn; vừa đổi hướng thì chuyển dáng mượt
+                float follow = limb.swapBlend > 0f ? 1f - Mathf.Exp(-18f * dt) : 1f;
+                for (int i = 0; i < n; i++)
+                {
+                    limb.angles[i] = Mathf.LerpAngle(limb.angles[i], limb.targets[i], follow);
+                    limb.spacing[i] = Mathf.Lerp(limb.spacing[i], limb.spacingTargets[i], follow);
+                    limb.velocities[i] = 0f;
+                }
+
+                return;
+            }
+
             if (limb.reaching)
             {
                 // Bám sát đích để chóp trúng điểm nắm; vừa bắt đầu vươn thì nối mượt từ dáng cũ
@@ -1190,7 +2337,7 @@ namespace Octopus
 
                 // Đứng trên đất: đoạn từ gốc tới chân theo đúng IK để chân đang bám không trượt (lò xo phản ứng
                 // chậm hơn nhịp bò); chóp vẫn theo lò xo nên vẫn nảy. Vừa tiếp đất thì chuyển dần sang IK
-                if (i <= limb.footBone && limb.planted > 0f)
+                if (i <= limb.exactUpTo && limb.planted > 0f)
                 {
                     limb.angles[i] = Mathf.LerpAngle(limb.angles[i], limb.targets[i], limb.planted);
                     limb.spacing[i] = Mathf.Lerp(limb.spacing[i], limb.spacingTargets[i], limb.planted);
@@ -1262,6 +2409,51 @@ namespace Octopus
             }
 
             return p;
+        }
+
+        // Vị trí khớp index khi xoay gốc thêm ik.x, cuộn các xương trước đó thêm ik.y, các xương dài stretch lần
+        static Vector2 JointFor(Limb limb, Vector2 ik, float stretch, int index)
+        {
+            Vector2 p = limb.root;
+            float a = 0f;
+            for (int i = 0; i < index; i++)
+            {
+                a += limb.bindAngles[i] + (i == 0 ? ik.x : ik.y) + (limb.wave != null ? limb.wave[i] : 0f);
+                p += Dir(a) * limb.bindLengths[i] * stretch;
+            }
+
+            return p;
+        }
+
+        // Như SolveFoot nhưng đưa khớp index (không phải điểm chạm đất) tới đích
+        static Vector2 SolveJoint(Limb limb, Vector2 target, Vector2 guess, float stretch, int index)
+        {
+            Vector2 x = guess;
+            const float h = 0.5f;
+            for (int iteration = 0; iteration < 4; iteration++)
+            {
+                Vector2 f0 = JointFor(limb, x, stretch, index);
+                Vector2 error = f0 - target;
+                if (error.sqrMagnitude < 1e-7f)
+                    break;
+
+                Vector2 ja = (JointFor(limb, x + new Vector2(h, 0f), stretch, index) - f0) / h;
+                Vector2 jc = (JointFor(limb, x + new Vector2(0f, h), stretch, index) - f0) / h;
+                float m11 = Vector2.Dot(ja, ja), m12 = Vector2.Dot(ja, jc), m22 = Vector2.Dot(jc, jc);
+                float lambda = (m11 + m22) * 0.01f + 1e-9f;
+                m11 += lambda;
+                m22 += lambda;
+                float r1 = -Vector2.Dot(ja, error), r2 = -Vector2.Dot(jc, error);
+                float det = m11 * m22 - m12 * m12;
+                if (Mathf.Abs(det) < 1e-12f)
+                    break;
+
+                var step = new Vector2((r1 * m22 - m12 * r2) / det, (m11 * r2 - m12 * r1) / det);
+                x += new Vector2(Mathf.Clamp(step.x, -8f, 8f), Mathf.Clamp(step.y, -4f, 4f));
+                x = new Vector2(Mathf.Clamp(x.x, -70f, 70f), Mathf.Clamp(x.y, -30f, 30f));
+            }
+
+            return x;
         }
 
         // Gauss-Newton 2 ẩn (xoay gốc, cuộn) để điểm chạm đất tới đích; bắt đầu từ nghiệm frame trước
@@ -1369,6 +2561,18 @@ namespace Octopus
         static void EnsureRuntime(Limb limb)
         {
             int n = limb.Count;
+            if (limb.blendAngles == null || limb.blendAngles.Length != n)
+            {
+                limb.actAngles = new float[n];
+                limb.actSpacing = new float[n];
+                limb.blendAngles = new float[n];
+                limb.blendSpacing = new float[n];
+                limb.blendTime = 1f;
+                limb.blendLength = 0f;
+                limb.blendPending = false;
+                limb.acting = false;
+            }
+
             if (limb.angles != null && limb.angles.Length == n)
                 return;
 
@@ -1378,6 +2582,8 @@ namespace Octopus
             limb.spacing = (float[])limb.bindLengths.Clone();
             limb.spacingTargets = (float[])limb.bindLengths.Clone();
             limb.wave = new float[n];
+            limb.restTargets = new float[n];
+            limb.restSpacing = new float[n];
             limb.home = Foot(limb, limb.bindAngles, limb.bindLengths);
             limb.ik = Vector2.zero;
         }
@@ -1410,17 +2616,44 @@ namespace Octopus
                 open = 0.06f; // kéo hết thanh thời gian xem trước để xem mắt nhắm
             }
 
-            eye.localScale = new Vector3(1f, open, 1f);
+            // Chiêu laze: vận sức thì mắt mở to, không chớp; bắn xong thì lim dim một lúc
+            float slit = 1f;
+            if (_laser != null && Application.isPlaying)
+            {
+                switch (_laser.Phase)
+                {
+                    case LaserPhase.Charging:
+                    case LaserPhase.Firing:
+                    {
+                        float power = _laser.Phase == LaserPhase.Firing ? 1f : Mathf.SmoothStep(0f, 1f, _laser.PhaseProgress);
+                        open = 1f + laserEyeWiden * power;
+                        slit = Mathf.Lerp(1f, laserPupilSlit, power);
+                        _blinkClock = -1f;
+                        _blinkTimer = Mathf.Max(_blinkTimer, 1f);
+                        break;
+                    }
+                    case LaserPhase.Cooldown when _laser.Elapsed < laserTiredTime:
+                        open = Mathf.Lerp(0.4f, 1f, Mathf.SmoothStep(0.6f, 1f, _laser.Elapsed / laserTiredTime));
+                        break;
+                }
+            }
 
-            // Con ngươi: nhìn về phía đá khi đu / bám, liếc theo hướng đi khi chạy nhảy, thỉnh thoảng nhìn quanh khi đứng
+            eye.localScale = new Vector3(1f, open, 1f);
+            pupil.localScale = new Vector3(slit, 1f, 1f);
+
+            // Con ngươi: nhìn về phía đá khi đu, liếc theo hướng đi khi bò / bay, thỉnh thoảng nhìn quanh khi đứng yên
             Vector2 look;
+            bool aiming = _laser != null && Application.isPlaying && _laser.Phase is LaserPhase.Charging or LaserPhase.Firing;
             switch (snap.Mode)
             {
+                case var _ when aiming:
+                    look = new Vector2(Mathf.Sign(ToArt(_laser.Direction).x), 0f); // nhìn thẳng theo hướng bắn laze
+                    break;
+                case var _ when _act != CombatPose.None && Application.isPlaying:
+                    look = new Vector2(_actDir, 0f); // ra đòn: nhìn thẳng về phía đánh
+                    break;
                 case Mode.Swing:
                     look = ToArt(snap.Anchor - snap.Position).normalized;
-                    break;
-                case Mode.Cling:
-                    look = new Vector2(0.4f, 0.8f);
                     break;
                 default:
                 {
@@ -1454,6 +2687,34 @@ namespace Octopus
         }
 
         // ---------- Sự kiện → nhịp, co giãn ----------
+
+        void OnLaserPhase(LaserPhase phase)
+        {
+            if (phase == LaserPhase.Firing)
+                Kick(-laserKick); // tia bung ra: thân bẹp lại như bị giật lùi
+        }
+
+        // Đầu ngả ra sau (ngược hướng bắn) khi đang bắn, run nhẹ khi vận sức
+        float LaserSway(Snapshot snap)
+        {
+            if (_laser == null || !Application.isPlaying)
+                return 0f;
+
+            float back = -Mathf.Sign(ToArt(_laser.Direction).x);
+            switch (_laser.Phase)
+            {
+                case LaserPhase.Charging:
+                    return 1.2f * _laser.PhaseProgress * Mathf.Sin(_time * 60f);
+                case LaserPhase.Firing:
+                {
+                    float start = Mathf.SmoothStep(0f, 1f, _laser.Elapsed / 0.15f);
+                    float end = Mathf.SmoothStep(0f, 1f, (_laser.FireTime - _laser.Elapsed) / 0.25f);
+                    return (back * laserRecoil + 1.5f * Mathf.Sin(_time * 47f)) * start * end;
+                }
+                default:
+                    return 0f;
+            }
+        }
 
         void OnJumped()
         {
@@ -1546,19 +2807,69 @@ namespace Octopus
 
                 Vector2 Step(float w)
                 {
-                    CrawlStep(index, w, out Vector2 step, out _, out _);
+                    CrawlStep(index, w, 1f, out Vector2 step, out _, out _);
                     return step;
                 }
 
                 float Curl(float w)
                 {
-                    CrawlStep(index, w, out _, out float curl, out _);
+                    CrawlStep(index, w, 1f, out _, out float curl, out _);
                     return curl;
+                }
+
+                if (crawlStyle == CrawlStyle.Inchworm && limbs[i].side != 0f)
+                {
+                    // Sâu đo: tay cầm = chóp xúc tu; curl = chóp quặp; peak = đỉnh vòm; contact = chóp đang bám (khoá chân).
+                    // 12 keyframe mỗi vòng (5 frame một cái); clip làm cho hướng sang phải
+                    Vector2 Tip(float w)
+                    {
+                        InchTip(index, w, 1f, out Vector2 tip, out _, out _, out _);
+                        return tip;
+                    }
+
+                    float Peak(float w)
+                    {
+                        InchTip(index, w, 1f, out _, out float peak, out _, out _);
+                        return peak;
+                    }
+
+                    float Hook(float w)
+                    {
+                        InchTip(index, w, 1f, out _, out _, out float hook, out _);
+                        return inchHook > 0f ? hook : 0f;
+                    }
+
+                    float Contact(float w)
+                    {
+                        InchTip(index, w, 1f, out _, out _, out _, out bool grip);
+                        return grip ? 1f : 0f;
+                    }
+
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.x", Sampled(w => Tip(w).x, 12)));
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.y", Sampled(w => Tip(w).y, 12)));
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.z", Sampled(w => 0f, 1)));
+                    curves.Add(Curve(path, typeof(OctopusCrawlFoot), "curl", Sampled(Hook, 12)));
+                    curves.Add(Curve(path, typeof(OctopusCrawlFoot), "peak", Sampled(Peak, 12)));
+                    curves.Add(Curve(path, typeof(OctopusCrawlFoot), "contact", SteppedFrames(Contact)));
+                    continue;
                 }
 
                 if (crawlStyle == CrawlStyle.Slither)
                 {
-                    // Trườn: chóp trượt tới lui êm (6 keyframe mỗi vòng, 10 frame một cái), luôn sát đất, không khoá chân
+                    // Trườn: tay cầm = chỗ xúc tu chạm đất, trượt tới lui êm (6 keyframe mỗi vòng, 10 frame một cái);
+                    // curl = chóp cong lên; không khoá chân
+                    Vector2 touch = SnakeBasePoint(limbs[i], 1f);
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.x", Sampled(w => touch.x + Step(w).x)));
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.y", Sampled(w => touch.y, 1)));
+                    curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.z", Sampled(w => 0f, 1)));
+                    curves.Add(Curve(path, typeof(OctopusCrawlFoot), "curl", Sampled(Curl)));
+                    curves.Add(Curve(path, typeof(OctopusCrawlFoot), "contact", Stepped(0f)));
+                    continue;
+                }
+
+                if (crawlStyle != CrawlStyle.Step)
+                {
+                    // Xúc tu giữa ở kiểu sâu đo: chóp trượt tới lui êm, luôn sát đất, không khoá chân
                     curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.x", Sampled(w => rest.x + Step(w).x)));
                     curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.y", Sampled(w => rest.y, 1)));
                     curves.Add(Curve(path, typeof(Transform), "m_LocalPosition.z", Sampled(w => 0f, 1)));
@@ -1624,6 +2935,24 @@ namespace Octopus
             }
 
             return new AnimationCurve(frames) { preWrapMode = WrapMode.Loop, postWrapMode = WrapMode.Loop };
+        }
+
+        // Đường bậc thang lặp vòng: một keyframe mỗi lần giá trị đổi (xét từng frame trong 60 frame)
+        static AnimationCurve SteppedFrames(Func<float, float> f)
+        {
+            var keys = new List<Keyframe> { new Keyframe(0f, f(0f), float.PositiveInfinity, float.PositiveInfinity) };
+            float last = f(0f);
+            for (int frame = 1; frame < 60; frame++)
+            {
+                float value = f(frame / 60f);
+                if (Mathf.Approximately(value, last))
+                    continue;
+                keys.Add(new Keyframe(frame / 60f, value, float.PositiveInfinity, float.PositiveInfinity));
+                last = value;
+            }
+
+            keys.Add(new Keyframe(1f, f(0f), float.PositiveInfinity, float.PositiveInfinity));
+            return new AnimationCurve(keys.ToArray()) { preWrapMode = WrapMode.Loop, postWrapMode = WrapMode.Loop };
         }
 
         static AnimationCurve Stepped(float value) => new AnimationCurve(
@@ -1700,7 +3029,7 @@ namespace Octopus
                 Limb limb = limbs[i];
                 DrawChain(limb, new Color(1f, 0.95f, 0.3f), new Color(1f, 0.25f, 0.2f), r);
 
-                if (_mode == Mode.Ground)
+                if (OnSurface(_mode))
                 {
                     // Đích IK của chân (dấu +) và chân đang bám đất (chấm xanh lá)
                     Vector3 target = torso.TransformPoint(limb.footTarget);

@@ -26,16 +26,19 @@ namespace Octopus.EditorTools
         {
             Foot(0, "X (trước / sau)", typeof(Transform), "m_LocalPosition.x", -1.6f, 1.6f),
             Foot(0, "Y (cao)", typeof(Transform), "m_LocalPosition.y", -0.1f, 0.6f),
-            Foot(0, "Cuộn", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
+            Foot(0, "Cuộn / quặp chóp", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
             Foot(0, "Bám chặt (khoá chân)", typeof(OctopusCrawlFoot), "contact", 0f, 1f, true),
+            Foot(0, "Đỉnh vòm (sâu đo)", typeof(OctopusCrawlFoot), "peak", 0.1f, 0.9f),
             Foot(1, "X (trước / sau)", typeof(Transform), "m_LocalPosition.x", -1.6f, 1.6f),
             Foot(1, "Y (cao)", typeof(Transform), "m_LocalPosition.y", -0.1f, 0.6f),
-            Foot(1, "Cuộn", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
+            Foot(1, "Cuộn / quặp chóp", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
             Foot(1, "Bám chặt (khoá chân)", typeof(OctopusCrawlFoot), "contact", 0f, 1f, true),
+            Foot(1, "Đỉnh vòm (sâu đo)", typeof(OctopusCrawlFoot), "peak", 0.1f, 0.9f),
             Foot(2, "X (trước / sau)", typeof(Transform), "m_LocalPosition.x", -1.6f, 1.6f),
             Foot(2, "Y (cao)", typeof(Transform), "m_LocalPosition.y", -0.1f, 0.6f),
-            Foot(2, "Cuộn", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
+            Foot(2, "Cuộn / quặp chóp", typeof(OctopusCrawlFoot), "curl", 0f, 2.2f),
             Foot(2, "Bám chặt (khoá chân)", typeof(OctopusCrawlFoot), "contact", 0f, 1f, true),
+            Foot(2, "Đỉnh vòm (sâu đo)", typeof(OctopusCrawlFoot), "peak", 0.1f, 0.9f),
             Foot(Body, "Chồm tới / lùi (X)", typeof(Transform), "m_LocalPosition.x", -0.3f, 0.3f),
             Foot(Body, "Nhấp nhô (Y)", typeof(Transform), "m_LocalPosition.y", -0.3f, 0.3f),
             Foot(Body, "Đầu ngả sau (độ)", typeof(OctopusCrawlBody), "mantle", -30f, 40f),
@@ -93,6 +96,8 @@ namespace Octopus.EditorTools
                 return;
 
             Undo.RecordObject(clip, "Chỉnh dáng bò");
+            Undo.RecordObject(rig.CrawlCurves, "Chỉnh dáng bò");
+            OctopusCrawlClipTools.MarkHandEdited(rig.CrawlCurves);
             EditorCurveBinding binding = Binding(rig, channel);
             AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, binding) ?? new AnimationCurve();
             int last = LastFrame(clip);
@@ -127,6 +132,8 @@ namespace Octopus.EditorTools
                 return;
 
             Undo.RecordObject(clip, "Xoá keyframe");
+            Undo.RecordObject(rig.CrawlCurves, "Xoá keyframe");
+            OctopusCrawlClipTools.MarkHandEdited(rig.CrawlCurves);
             foreach (Channel channel in Channels)
             {
                 if (handle >= 0 && channel.Handle != handle)
@@ -184,7 +191,11 @@ namespace Octopus.EditorTools
     /// </summary>
     class OctopusCrawlWindow : EditorWindow
     {
-        static readonly string[] HandleNames = { "Xúc tu TRÁI (sau, đẩy)", "Xúc tu GIỮA (lăn dưới thân)", "Xúc tu PHẢI (trước, vươn kéo)", "THÂN" };
+        static readonly string[] HandleNames =
+        {
+            "Xúc tu TRÁI (phía sau khi đi sang phải) — tay cầm = chóp", "Xúc tu GIỮA — tay cầm = chỗ chạm đất",
+            "Xúc tu PHẢI (phía trước khi đi sang phải) — tay cầm = chóp", "THÂN",
+        };
         static readonly string[] ShortNames = { "Trái", "Giữa", "Phải", "Thân" };
         static readonly Color[] HandleColors =
         {
@@ -307,7 +318,7 @@ namespace Octopus.EditorTools
                 return;
             }
 
-            if (!_rig.UsesCrawlClip)
+            if (!_rig.HasCrawlClip)
             {
                 EditorGUILayout.HelpBox("Rig Visual đang tắt Use Crawl Clip (bò bằng code). Tick lại để dùng bảng này.", MessageType.Warning);
                 return;
@@ -539,7 +550,7 @@ namespace Octopus.EditorTools
 
         void OnSceneGUI(SceneView view)
         {
-            if (Application.isPlaying || _rig == null || Clip == null || !_rig.UsesCrawlClip || _rig.PoseTransform == null)
+            if (Application.isPlaying || _rig == null || Clip == null || !_rig.HasCrawlClip || _rig.PoseTransform == null)
                 return;
 
             Event e = Event.current;
