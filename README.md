@@ -19,9 +19,28 @@ Game 2D: bạch tuộc 3 xúc tu bắn xúc tu và đu kiểu người nhện tr
 | Bám dưới đá | Bắn sang đá khác | Thả xuống | — | Bò dọc theo đá |
 
 Nhấc tay khi đang đu **không** buông xúc tu; muốn buông thì chạm nhanh một cái.
+Để nguyên không vuốt, không giữ thì bạch tuộc đu đều mãi ở đúng độ cao đó: không tự mạnh lên, không yếu dần.
 **Cộng hưởng:** giữ tay để rút xúc tu đúng lúc đi qua điểm thấp nhất thì cú đu cao dần (bảo toàn mô-men động lượng, như nhún xích đu).
 
-Trong Editor dùng chuột như ngón tay, hoặc bàn phím: A/D = vuốt, W = giữ, Space = tap.
+**Chiêu (cụm 3 nút góc dưới bên phải) và thanh nộ (góc trên bên trái):** nút **2** ở góc, nút **1** bên trái nút 2,
+nút **3** phía trên nút 2.
+- **1 = đánh thường** (bấm liên tục ra combo 3 đòn), **2 = chiêu**, **3 = chiêu cuối** (cần nộ qua mốc 1, dùng là xả hết nộ,
+  mốc càng cao càng đau).
+- **Giữ một nút rồi vuốt về phía nút khác** thì ra kiểu chiêu khác, nên mỗi nhân vật có 9 chiêu.
+- Nộ đầy dần khi di chuyển và khi đánh trúng; thanh nộ có 3 mốc.
+- Có 3 bia tập để thử chiêu.
+
+Bộ chiêu từng con, phân tích, cách chỉnh: `Docs/ky_nang/PHAN_TICH_KY_NANG.md`. Laze mắt cũ của bạch tuộc giờ là nút 2 (chạm).
+
+Trong Editor dùng chuột như ngón tay, hoặc bàn phím: A/D = vuốt, W = giữ, Space = tap; 1 / 2 / 3 = nút chiêu
+(giữ một số rồi bấm số khác = vuốt từ nút này sang nút kia); R = thêm 100 nộ để thử chiêu cuối.
+
+**Chọn nhân vật:** vào game là màn **chọn nhân vật** (scene `CharacterSelect`): chạm thẻ **Bạch tuộc** hoặc **Nhện**
+rồi bấm **Bắt đầu**. Trong màn chơi, nút **Đổi nhân vật** ở góc trên bên phải quay lại màn chọn.
+Hai nhân vật **di chuyển giống hệt nhau** (bảng trên), mỗi con một **bộ chiêu riêng**. Nhện đu bằng **tơ** nhả từ bụng
+thay cho xúc tu, bò bằng 8 chân, bám ngược dưới đá thì lộn ngược.
+Trong Editor: bấm Play ở Playground cũng mở màn chọn nhân vật trước (như trên điện thoại). Muốn vào thẳng màn chơi để thử
+nhanh: người chơi `Octopus` → component **Player Character** → bỏ tick **Choose On Play**, chọn nhân vật ở ô **Start With**. Hướng dẫn nhện: `Docs/spider/DAT_ANH_O_DAY.md`.
 
 ## Cấu trúc
 
@@ -34,6 +53,9 @@ Assets/_Project/
 │   ├── Presentation/       OctopusSpriteAnimator (hoạt ảnh khung hình), OctopusAnimator (hoạt ảnh vẽ bằng code),
 │   │                       ReachIndicator (bán kính), SpeedZoom (camera),
 │   │                       ParallaxLayer (nền nhiều lớp), AmbientMotes (bụi sáng)
+│   ├── Combat/             Hệ thống chiêu: CombatController, CharacterSkills (18 chiêu), RageMeter (nộ), Health,
+│   │                       TrainingDummy (bia tập), CombatFx (hiệu ứng), DamageNumbers
+│   ├── UI/                 SkillPad (cụm 3 nút + vuốt), RageBar (thanh nộ), màn chọn nhân vật
 │   ├── Level/              Rock (đá bám được, viền sáng), KillZone
 │   └── Core/               FrameRateSetup (60–120fps)
 ├── Scripts/Editor/         ProjectSetup (dựng scene), CaveBuilder (vẽ hang động), OctopusBuilder (dựng bạch tuộc),
@@ -245,12 +267,12 @@ Octopus
 | Trạng thái | Xương làm gì |
 |---|---|
 | Đứng yên | Đầu hạ thấp, hai xúc tu bên xoè ra nằm trên đất uốn sóng chậm, đầu phồng xẹp như thở, mắt chớp, con ngươi liếc quanh |
-| **Bò** | Kiểu **trườn**: đầu hạ thấp, ba xúc tu nằm dài sát đất uốn sóng như rắn từ gốc ra ngọn, chóp chỉ trượt nhẹ tới lui, thân lướt êm. (Kiểu bước cũ: `Crawl Style` = Step) |
+| **Bò** | Kiểu **trườn hình rắn**: đầu hạ thấp; cả 3 xúc tu hạ xuống chạm đất rồi nằm dài ra tận ngọn thành các khúc chữ S, sóng chạy dọc xúc tu về phía sau như rắn (xúc tu trước vươn ra trước, xúc tu sau và giữa kéo lê phía sau). Chỉnh: `Snake Height` / `Snake Length` / `Snake Flow`. Đổi hướng không lật thân, chỉ đổi vai xúc tu (`Flip Body` để lật như cũ). Kiểu khác: `Crawl Style` = Inchworm (sâu đo) / Step (bước) |
 | Nhảy | Bật lên thì xúc tu duỗi ra kéo theo sau như mực phụt nước; tới đỉnh thì cuộn lại như tranh |
 | Rơi | Xúc tu xoè ngược lên như chiếc ô, đầu ngả ngược hướng bay |
 | Tiếp đất | Thân bẹp và hạ xuống, xúc tu vẫn bám đất nên tự co lại, rồi đứng dậy |
 | Đu | **Xúc tu giữa vươn thật tới đá**: đoạn gốc kéo dài, đoạn chóp giữ nét cuộn của tranh và quấn vào đá |
-| Bám đá | Đỉnh đầu áp vào đá, hai xúc tu bên nắm mặt đá; bò dọc đá thì thay nhau với tới như đu xà |
+| Bám đá | **Treo ngược**: tới đá thì lật người, cả 3 xúc tu bám lên mặt dưới đá, đầu chúc xuống; vuốt ngang thì **bò ngược** — xúc tu trườn hình rắn dọc mặt đá (cùng kiểu bò trên sàn, lật dọc). Chỉnh: `Cling Crouch` (thân sát đá / treo xa), `Cling Reach`, `Hang Flip Time`; xem thử: Preview = `Cling` / `Cling Crawl` |
 | Mắt | Con ngươi luôn dựng đứng dù thân nghiêng (mắt bạch tuộc thật giữ con ngươi theo phương ngang trời) |
 
 ### Dáng bò chỉnh tay (clip `Crawl.anim`)
@@ -287,7 +309,7 @@ Chọn `Octopus → Rig Visual` trong Hierarchy, mở cửa sổ **Scene**:
   2 phải = vươn kéo): `Phase` (lệch nhịp), `Grip` (phần nhịp bám đất), `Plant Ahead` (đặt chóp xa phía trước bao nhiêu),
   `Lift` (nhấc cao), `Grip Curl` / `Swing Curl` (chóp cuộn chặt hay duỗi khi bám / khi đưa tới).
 - Đứng yên: `Breath Amount` (đầu thở), `Idle Curl`, `Tip Wiggle`.
-- Hạ thân khi bò: `Crawl Crouch` (đầu thấp xuống, xúc tu tự co lại), `Crawl Flatten` (đầu dẹt xuống một chút).
+- Hạ thân: `Idle Crouch` (đầu thấp lúc đứng, 0.27), `Crawl Crouch` (thấp thêm khi bò, 0.2; xúc tu tự co lại), `Crawl Flatten` (đầu dẹt xuống một chút).
 - Sóng trên xúc tu (chạy từ gốc ra tận ngọn, cả lúc bò, bay, đu): `Wave Amount`, `Wave Tip Boost` (ngọn mạnh gấp mấy lần gốc),
   `Wave Length`, `Wave Speed`, `Wave Idle`. Lúc bò, IK tính cả sóng nên chóp đang bám vẫn đứng yên.
 - Vây quanh đầu lượn sóng: ảnh đầu có thêm 12 xương vây `FIN_00…11` toả tròn từ tâm đầu (chỉ viền gai đi theo, mặt và mắt
@@ -354,7 +376,7 @@ Vẽ lại theo đúng bố cục cũ (6 khung xếp ngang, nền trắng, cùng
 ## Tinh chỉnh cảm giác điều khiển
 
 Chọn `Octopus` trong scene:
-- `SwingController`: `reach` (bán kính xúc tu), `reelSpeed`, `pumpForce`, `autoPumpForce`, `groundLaunchSpeed`, `releaseBoost`, `maxSpeed`.
+- `SwingController`: `reach` (bán kính xúc tu), `reelSpeed`, `pumpForce`, `holdSwingEnergy` (để nguyên thì giữ nguyên đà đu), `groundLaunchSpeed`, `releaseBoost`, `maxSpeed`.
 - `SurfaceMover`: `crawlSpeed`, `jumpSpeed`, `clingCrawlSpeed`, `dropSpeed`.
 - `PlayerInputReader`: `tapMaxDuration` (ngưỡng tap / giữ), `dragThreshold` (ngưỡng vuốt).
 - Trọng lực: `Rigidbody2D.gravityScale`.
@@ -373,3 +395,27 @@ Window → General → **Test Runner** → PlayMode → Run All. Hoặc chạy t
 Menu **Octopus → Build iOS (Xcode project)** → mở `Builds/iOS/Unity-iPhone.xcodeproj` → chọn iPhone → ▶ Run.
 
 Trước khi lên TestFlight: đổi bundle id `com.yourcompany.octopus`, Company Name và **Signing Team ID** trong **Project Settings → Player**.
+
+## Build web (chơi qua Wi-Fi nội bộ)
+
+Cần module **Web Build Support** của Unity 6000.3.26f1 (Unity Hub → Installs → Add modules). Build bằng menu
+**Octopus → Build Web (mạng nội bộ)**, hoặc từ terminal trên một bản sao project để Unity đang mở không phải đổi nền tảng:
+
+```bash
+/Applications/Unity/Hub/Editor/6000.3.26f1/Unity.app/Contents/MacOS/Unity -batchmode -quit \
+  -projectPath . -buildTarget WebGL -executeMethod Octopus.EditorTools.BuildScripts.BuildWeb
+```
+
+Kết quả ở `Builds/Web` (khoảng 80 MB, không nén vì server `http` thường không gửi header nén). Mở cho máy cùng Wi-Fi:
+
+```bash
+caffeinate -i python3 -m http.server 8000 --bind 0.0.0.0 --directory Builds/Web
+```
+
+Người chơi mở `http://<IP của Mac>:8000` (xem IP: `ipconfig getifaddr en0`). Mac phải bật, không ngủ; IP đổi thì link đổi.
+
+- Trang web là `Assets/WebGLTemplates/Octopus/index.html`: chặn cuộn / phóng to / giữ tay hiện menu của trình duyệt,
+  nhắc xoay ngang khi cầm dọc, thanh tải bằng tiếng Việt.
+- Web không có font hệ thống để mượn, nên `WebFontSetup` đổi font mặc định sang Liberation Sans
+  (`Assets/_Project/Resources/Fonts`, giấy phép OFL) cho chữ tiếng Việt có dấu chồng (ọ, ậ, ộ…).
+- Mở bằng đúp chuột `index.html` sẽ không chạy: luôn mở qua server.

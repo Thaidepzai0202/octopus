@@ -23,6 +23,7 @@ namespace Octopus.EditorTools
         const string PlayerLayer = "Player";
         const string AnchorableLayer = "Anchorable";
         const string HazardLayer = "Hazard";
+        const string EnemyLayer = "Enemy";
 
         [MenuItem("Octopus/Dựng lại màn chơi (ghi đè scene)", priority = 1)]
         public static void Run()
@@ -47,6 +48,7 @@ namespace Octopus.EditorTools
             SetLayer(layers, 6, PlayerLayer);
             SetLayer(layers, 7, AnchorableLayer);
             SetLayer(layers, 8, HazardLayer);
+            SetLayer(layers, 9, EnemyLayer);
             tagManager.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -127,7 +129,13 @@ namespace Octopus.EditorTools
             CaveBuilder.Build(camera, glow, glowLine, LayerMask.NameToLayer(AnchorableLayer), LayerMask.NameToLayer(HazardLayer));
             GameObject player = OctopusBuilder.Build(plainLine, glow, CreateBodyMaterial(),
                 LayerMask.NameToLayer(PlayerLayer), LayerMask.GetMask(AnchorableLayer), LayerMask.GetMask("Default", AnchorableLayer));
+            LaserSkillBuilder.Build(player, glow, LayerMask.GetMask("Default", AnchorableLayer));
+            CombatBuilder.Build(player, glow, LayerMask.NameToLayer(EnemyLayer)); // bộ chiêu, nộ, bia tập, HUD
+            SpiderBuilder.Build(player.GetComponent<OctopusController>(), glow); // hình nhện, bật khi chọn nhện
+            CharacterSelectBuilder.AddBackButton(GameObject.Find("HUD/Safe Area").GetComponent<RectTransform>(),
+                player.GetComponent<PlayerInputReader>());
             CreateFollowCamera(player);
+            GameFeelBuilder.Build(); // khựng hình, rung camera, vòng sao choáng của bia tập
 
             // Ảnh vẽ tay (nếu có trong Art/Drawn) thay cho art vẽ bằng code
             List<string> drawn = DrawnArt.Apply();
@@ -136,7 +144,15 @@ namespace Octopus.EditorTools
 
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+
+            // Màn chọn nhân vật mở đầu tiên, rồi mới vào màn chơi
+            CharacterSelectBuilder.BuildScene(glow);
+            EditorSceneManager.OpenScene(ScenePath);
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(CharacterSelectBuilder.ScenePath, true),
+                new EditorBuildSettingsScene(ScenePath, true),
+            };
         }
 
         static Camera CreateCamera()

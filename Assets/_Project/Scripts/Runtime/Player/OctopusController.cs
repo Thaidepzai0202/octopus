@@ -34,6 +34,7 @@ namespace Octopus
         Camera _camera;
         bool _holding;
         float _drag;
+        float _holdFacingUntil;
 
         public OctopusState State { get; private set; } = OctopusState.Airborne;
 
@@ -91,7 +92,8 @@ namespace Octopus
                     break;
             }
 
-            float direction = _drag != 0f ? _drag : State == OctopusState.Clinging ? 0f : _body.linearVelocity.x;
+            bool holdFacing = State == OctopusState.Clinging || Time.time < _holdFacingUntil;
+            float direction = _drag != 0f ? _drag : holdFacing ? 0f : _body.linearVelocity.x;
             if (Mathf.Abs(direction) > 0.5f)
                 Facing = Mathf.Sign(direction);
         }
@@ -170,6 +172,9 @@ namespace Octopus
             _swing.Reeling = State == OctopusState.Swinging && _holding;
             _swing.PumpInput = State == OctopusState.Swinging ? _drag : 0f;
         }
+
+        /// <summary>Giữ hướng mặt trong seconds giây dù thân bị hất lùi (chiêu bật ra sau); kéo tay vẫn quay được.</summary>
+        public void HoldFacing(float seconds) => _holdFacingUntil = Mathf.Max(_holdFacingUntil, Time.time + seconds);
 
         public void ResetTo(Vector2 position)
         {

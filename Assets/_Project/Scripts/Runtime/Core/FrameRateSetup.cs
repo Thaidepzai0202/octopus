@@ -10,6 +10,10 @@ namespace Octopus
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Apply()
         {
+            // Trên web trình duyệt tự vẽ theo tần số quét màn hình; đặt targetFrameRate làm Unity bỏ nhịp đó → giật
+            if (Application.platform == RuntimePlatform.WebGLPlayer)
+                return;
+
             int refreshRate = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
             Application.targetFrameRate = Mathf.Clamp(refreshRate, 60, 120);
         }

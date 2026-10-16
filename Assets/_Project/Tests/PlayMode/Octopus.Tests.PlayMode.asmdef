@@ -4,7 +4,8 @@
     "references": [
         "Octopus.Runtime",
         "UnityEngine.TestRunner",
-        "Unity.2D.Animation.Runtime"
+        "Unity.2D.Animation.Runtime",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

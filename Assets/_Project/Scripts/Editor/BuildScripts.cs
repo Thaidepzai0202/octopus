@@ -9,11 +9,13 @@ namespace Octopus.EditorTools
     /// <summary>
     /// Build bằng một lệnh, dùng được từ menu lẫn terminal:
     /// Unity -batchmode -quit -projectPath . -buildTarget iOS -executeMethod Octopus.EditorTools.BuildScripts.BuildIos
+    /// Unity -batchmode -quit -projectPath . -buildTarget WebGL -executeMethod Octopus.EditorTools.BuildScripts.BuildWeb
     /// </summary>
     public static class BuildScripts
     {
         const string IosPath = "Builds/iOS";
         const string AndroidPath = "Builds/Android/octopus.apk";
+        const string WebPath = "Builds/Web";
 
         [MenuItem("Octopus/Build iOS (Xcode project)", priority = 40)]
         public static void BuildIos()
@@ -27,6 +29,20 @@ namespace Octopus.EditorTools
         public static void BuildAndroid()
         {
             Build(BuildTarget.Android, AndroidPath, BuildOptions.None);
+        }
+
+        /// <summary>
+        /// Bản web cho mạng nội bộ: không nén, vì server http thường (python -m http.server) không gửi header nén
+        /// và mạng LAN đủ nhanh. Trang dùng template Assets/WebGLTemplates/Octopus (chặn cử chỉ trình duyệt, nhắc xoay ngang).
+        /// Chạy thử: python3 -m http.server 8000 --directory Builds/Web rồi mở http://&lt;IP máy&gt;:8000
+        /// </summary>
+        [MenuItem("Octopus/Build Web (mạng nội bộ)", priority = 42)]
+        public static void BuildWeb()
+        {
+            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+            PlayerSettings.WebGL.decompressionFallback = false;
+            PlayerSettings.WebGL.template = "PROJECT:Octopus";
+            Build(BuildTarget.WebGL, WebPath, BuildOptions.None);
         }
 
         static void Build(BuildTarget target, string path, BuildOptions options)

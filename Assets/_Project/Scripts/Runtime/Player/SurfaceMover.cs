@@ -28,6 +28,8 @@ namespace Octopus
         public Collider2D ClingSurface => _clingSurface;
         public Vector2 ClingPoint { get; private set; }
         public Vector2 ClingNormal { get; private set; } = Vector2.down;
+        /// <summary>Vận tốc bò dọc mặt đá trong bước vật lý vừa rồi (thân kinematic nên Rigidbody không tự có).</summary>
+        public Vector2 ClingVelocity { get; private set; }
 
         void Awake()
         {
@@ -65,16 +67,20 @@ namespace Octopus
             _body.bodyType = RigidbodyType2D.Kinematic;
             _body.linearVelocity = Vector2.zero;
             _body.position = point + ClingNormal * _radius;
+            ClingVelocity = Vector2.zero;
         }
 
         // Bò dọc mặt đá; ClosestPoint giữ điểm bám luôn nằm trên đá nên tới mép là dừng
         public void CrawlAlongCling(float input)
         {
+            ClingVelocity = Vector2.zero;
             if (!IsClinging || input == 0f)
                 return;
 
+            Vector2 previous = ClingPoint;
             Vector2 next = ClingPoint + SurfaceTangent(ClingNormal) * (input * clingCrawlSpeed * Time.fixedDeltaTime);
             ClingPoint = _clingSurface.ClosestPoint(next + ClingNormal * 0.05f);
+            ClingVelocity = (ClingPoint - previous) / Time.fixedDeltaTime;
             _body.MovePosition(ClingPoint + ClingNormal * _radius);
         }
 
@@ -84,12 +90,13 @@ namespace Octopus
                 return;
 
             _clingSurface = null;
+            ClingVelocity = Vector2.zero;
             _body.bodyType = RigidbodyType2D.Dynamic;
             _body.linearVelocity = drop ? ClingNormal * dropSpeed : Vector2.zero;
         }
 
-        // Hướng "sang phải" dọc theo bề mặt; với mặt đứng thì "sang phải" là đi lên
-        static Vector2 SurfaceTangent(Vector2 normal)
+        /// <summary>Hướng "sang phải" dọc theo bề mặt; với mặt đứng thì "sang phải" là đi lên.</summary>
+        public static Vector2 SurfaceTangent(Vector2 normal)
         {
             var tangent = new Vector2(-normal.y, normal.x);
             bool flip = Mathf.Abs(tangent.x) > 0.1f ? tangent.x < 0f : tangent.y < 0f;

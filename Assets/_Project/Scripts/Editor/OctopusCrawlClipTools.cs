@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Octopus.EditorTools
 {
@@ -17,6 +18,8 @@ namespace Octopus.EditorTools
     static class OctopusCrawlClipTools
     {
         static List<OctopusCrawlCurves> s_assets;
+        static bool s_writing; // đang tự ghi clip từ thông số: không tính là sửa tay
+        static bool s_saveQueued;
 
         static OctopusCrawlClipTools()
         {
@@ -49,9 +52,29 @@ namespace Octopus.EditorTools
         {
             foreach (OctopusCrawlCurves asset in Assets())
             {
-                if (asset != null && asset.source == clip)
-                    Bake(asset);
+                if (asset == null || asset.source != clip)
+                    continue;
+                // Unity báo sự kiện này cả lúc nạp / import clip, nên chỉ tính là sửa tay khi đang chỉnh trong cửa sổ
+                // Animation (đang Preview / Record hoặc đang chọn cửa sổ đó). Bảng ⚡ tự đánh dấu qua MarkHandEdited
+                if (!s_writing && (AnimationMode.InAnimationMode() || AnimationWindowFocused()))
+                    MarkHandEdited(asset);
+
+                Bake(asset);
             }
+        }
+
+        static bool AnimationWindowFocused() =>
+            EditorWindow.focusedWindow != null && EditorWindow.focusedWindow.GetType().Name == "AnimationWindow";
+
+        /// <summary>Clip bò vừa được sửa tay: từ giờ dáng bò lấy theo clip (các ô "Bò bằng code" tạm không có tác dụng).</summary>
+        public static void MarkHandEdited(OctopusCrawlCurves asset)
+        {
+            if (asset == null || asset.handEdited || s_writing)
+                return;
+            asset.handEdited = true;
+            EditorUtility.SetDirty(asset);
+            Debug.Log("[Octopus] Clip bò đã được sửa tay: từ giờ dáng bò lấy theo clip. Muốn quay về các ô \"Bò bằng code\": " +
+                      "Inspector của Rig Visual → Bỏ phần sửa tay.");
         }
 
         static IEnumerable<OctopusCrawlCurves> Assets()
@@ -90,7 +113,13 @@ namespace Octopus.EditorTools
         }
 
         /// <summary>Ghi đè clip bằng dáng bò bằng code hiện tại (mục Gait…) rồi chép sang bản game dùng.</summary>
-        public static void ResetFromGait(OctopusRigAnimator rig)
+        public static void ResetFromGait(OctopusRigAnimator rig) => Regenerate(rig, true);
+
+        /// <summary>
+        /// Viết lại clip theo các ô "Bò bằng code". undoable: ghi Undo + lưu ngay (bấm nút); false: lưu sau (đang kéo thanh trượt).
+        /// Clip coi như chưa sửa tay.
+        /// </summary>
+        public static void Regenerate(OctopusRigAnimator rig, bool undoable)
         {
             OctopusCrawlCurves asset = rig.CrawlCurves;
             if (asset == null || asset.source == null)
@@ -99,11 +128,38 @@ namespace Octopus.EditorTools
                 return;
             }
 
-            Undo.RegisterCompleteObjectUndo(asset.source, "Tạo lại clip bò");
-            WriteClip(asset.source, rig.CrawlCurvesFromGait());
+            if (undoable)
+                Undo.RegisterCompleteObjectUndo(new Object[] { asset.source, asset }, "Tạo lại clip bò");
+            s_writing = true;
+            try
+            {
+                WriteClip(asset.source, rig.CrawlCurvesFromGait());
+            }
+            finally
+            {
+                s_writing = false;
+            }
+
+            asset.handEdited = false;
+            EditorUtility.SetDirty(asset);
             Bake(asset);
-            AssetDatabase.SaveAssets();
+            if (undoable)
+                AssetDatabase.SaveAssets();
+            else
+                QueueSave();
             rig.SampleCrawlClip(0f);
+        }
+
+        static void QueueSave()
+        {
+            if (s_saveQueued)
+                return;
+            s_saveQueued = true;
+            EditorApplication.delayCall += () =>
+            {
+                s_saveQueued = false;
+                AssetDatabase.SaveAssets();
+            };
         }
 
         public static void WriteClip(AnimationClip clip, List<OctopusRigAnimator.CrawlCurve> curves)
