@@ -25,6 +25,7 @@ namespace Octopus.EditorTools
             viewSettings.FindProperty("glow").objectReferenceValue = glow;
             viewSettings.FindProperty("flare").objectReferenceValue = FlareSprite();
             viewSettings.FindProperty("smoke").objectReferenceValue = SmokeSprite();
+            viewSettings.FindProperty("ring").objectReferenceValue = RingSprite(); // vòng sáng co vào mắt khi vận sức
             viewSettings.ApplyModifiedPropertiesWithoutUndo();
         }
 

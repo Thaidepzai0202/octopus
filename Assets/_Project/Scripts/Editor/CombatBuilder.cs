@@ -8,9 +8,10 @@ using static Octopus.EditorTools.CharacterSelectBuilder;
 namespace Octopus.EditorTools
 {
     /// <summary>
-    /// Dựng hệ thống chiêu: nộ + bộ 18 chiêu trên người chơi (CombatController), hiệu ứng chiêu (Combat FX), số sát thương,
-    /// bia tập để thử chiêu, và HUD: cụm 3 nút chiêu góc dưới phải (nút 2 ở góc, 1 bên trái, 3 phía trên), thanh nộ góc
-    /// trên trái. Biểu tượng nút: Art/UI/Skill_*.png (Tools/art/skill_icons.py).
+    /// Dựng hệ thống chiêu: nộ + bộ 9 chiêu cho mỗi nhân vật (bạch tuộc, nhện, RED, PINK, BLUE) trên người chơi
+    /// (CombatController), hiệu ứng chiêu (Combat FX), số sát thương, bia tập để thử chiêu, và HUD: cụm 3 nút chiêu góc dưới
+    /// phải (nút 2 ở góc, 1 bên trái, 3 phía trên), thanh nộ góc trên trái; nhân vật người có thêm cần điều hướng góc trái và
+    /// nút NHẢY (HeroBuilder.BuildHud). Biểu tượng nút: Art/UI/Skill_*.png (Tools/art/skill_icons.py, Tools/art/hero_ui.py).
     /// </summary>
     static class CombatBuilder
     {
@@ -19,19 +20,26 @@ namespace Octopus.EditorTools
         // Bia tập: hai bên bệ xuất phát và trên đảo nghỉ giữa màn
         static readonly Vector2[] DummySpots = { new Vector2(3.7f, -1f), new Vector2(-3.9f, -1f), new Vector2(34.5f, -1f) };
 
-        public static void Build(GameObject player, Sprite glow, int enemyLayer)
+        /// <summary>trainingDummies = false: không dựng bia tập (màn đánh boss), chỉ bộ chiêu + hiệu ứng + HUD.</summary>
+        public static void Build(GameObject player, Sprite glow, int enemyLayer, bool trainingDummies = true)
         {
             var rage = player.AddComponent<RageMeter>();
             var combat = player.AddComponent<CombatController>();
             combat.SetDefaultSkills(DefaultSkills.Octopus(), DefaultSkills.Spider());
+            combat.SetDefaultSkills(PlayableCharacter.Red, RedSkills.Default());
+            combat.SetDefaultSkills(PlayableCharacter.Pink, PinkSkills.Default());
+            combat.SetDefaultSkills(PlayableCharacter.Blue, BlueSkills.Default());
             var so = new SerializedObject(combat);
             so.FindProperty("targetMask").intValue = 1 << enemyLayer;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             BuildFx(glow);
             BuildDamageNumbers();
-            foreach (Vector2 spot in DummySpots)
-                BuildDummy(spot, enemyLayer);
+            if (trainingDummies)
+            {
+                foreach (Vector2 spot in DummySpots)
+                    BuildDummy(spot, enemyLayer);
+            }
             BuildHud(combat, player.GetComponent<PlayerInputReader>(), rage, glow);
         }
 
@@ -77,7 +85,8 @@ namespace Octopus.EditorTools
             so.FindProperty("web").objectReferenceValue = FxWeb();
             so.FindProperty("cocoon").objectReferenceValue = FxCocoon();
             so.FindProperty("tentacle").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Octopus/Rig/tentacle_m.png");
-            so.FindProperty("spiderling").objectReferenceValue = ImportSprite($"{UiFolder}/Portrait_Spider.png");
+            so.FindProperty("spiderling").objectReferenceValue = FxSprite("FxSpiderling", 236f); // nhện con nhìn ngang, 2 dáng bước
+            so.FindProperty("spiderlingStep").objectReferenceValue = FxSprite("FxSpiderlingStep", 236f);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -182,6 +191,7 @@ namespace Octopus.EditorTools
 
             BuildPad(safe, combat, input, glow);
             BuildRageBar(safe, rage, glow);
+            HeroBuilder.BuildHud(safe, combat, input, glow);
         }
 
         static void BuildPad(RectTransform safe, CombatController combat, PlayerInputReader input, Sprite glow)
@@ -190,6 +200,7 @@ namespace Octopus.EditorTools
             Sprite ring = LaserSkillBuilder.RingSprite();
             Sprite[] octopusIcons = Icons("Octopus");
             Sprite[] spiderIcons = Icons("Spider");
+            Sprite triangle = HeroBuilder.TriangleSprite();
 
             RectTransform pad = Rect("Skill Pad", safe);
             pad.anchorMin = pad.anchorMax = pad.pivot = new Vector2(1f, 0f);
@@ -239,6 +250,19 @@ namespace Octopus.EditorTools
                 Text number = Label("Number", tag.transform, (i + 1).ToString(), 34, FontStyle.Bold, new Color(1f, 0.9f, 0.6f));
                 Stretch(number.rectTransform);
 
+                // Nhân vật người kéo cần lên / xuống: huy hiệu ▲ / ▼ góc trên phải và tên chiêu kiểu đó dưới nút
+                Image badge = Img("Variant Badge", root, disc, 0f, new Color(1f, 0.82f, 0.3f));
+                Place(badge.rectTransform, new Vector2(1f, 1f), new Vector2(-16f, -16f), new Vector2(66f, 66f));
+                Image arrow = Img("Arrow", badge.transform, triangle, 15f, new Color(0.1f, 0.05f, 0.2f));
+                badge.gameObject.SetActive(false);
+                Text variantName = Label("Variant Name", root, "", 28, FontStyle.Bold, new Color(1f, 0.82f, 0.3f));
+                Place(variantName.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, -28f), new Vector2(250f, 56f));
+                variantName.horizontalOverflow = HorizontalWrapMode.Wrap; // tên dài xuống 2 dòng / thu nhỏ, không đè nút bên cạnh
+                variantName.resizeTextForBestFit = true;
+                variantName.resizeTextMinSize = 16;
+                variantName.resizeTextMaxSize = 28;
+                variantName.gameObject.SetActive(false);
+
                 SerializedProperty element = list.GetArrayElementAtIndex(i);
                 element.FindPropertyRelative("rect").objectReferenceValue = root;
                 element.FindPropertyRelative("icon").objectReferenceValue = icon;
@@ -246,6 +270,9 @@ namespace Octopus.EditorTools
                 element.FindPropertyRelative("ring").objectReferenceValue = rim;
                 element.FindPropertyRelative("halo").objectReferenceValue = halo;
                 element.FindPropertyRelative("label").objectReferenceValue = label;
+                element.FindPropertyRelative("badge").objectReferenceValue = badge;
+                element.FindPropertyRelative("badgeArrow").objectReferenceValue = arrow;
+                element.FindPropertyRelative("variantName").objectReferenceValue = variantName;
             }
 
             // 3 chấm mốc nộ phía trên nút 3
@@ -267,6 +294,9 @@ namespace Octopus.EditorTools
             so.FindProperty("skillName").objectReferenceValue = skillName;
             SetSprites(so.FindProperty("octopusIcons"), octopusIcons);
             SetSprites(so.FindProperty("spiderIcons"), spiderIcons);
+            SetSprites(so.FindProperty("redIcons"), Icons("Red"));
+            SetSprites(so.FindProperty("pinkIcons"), Icons("Pink"));
+            SetSprites(so.FindProperty("blueIcons"), Icons("Blue"));
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -318,7 +348,7 @@ namespace Octopus.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        static Image Img(string name, Transform parent, Sprite sprite, float inset, Color color)
+        internal static Image Img(string name, Transform parent, Sprite sprite, float inset, Color color)
         {
             RectTransform rect = Rect(name, parent);
             Stretch(rect, inset);
@@ -346,7 +376,7 @@ namespace Octopus.EditorTools
 
         // ---------- Art vẽ bằng code ----------
 
-        static Sprite WhiteSprite() => ArtFactory.Sprite("UiWhite", 8, 8, 8f, new Vector2(0.5f, 0.5f), (u, v) => Color.white, 1, false);
+        internal static Sprite WhiteSprite() => ArtFactory.Sprite("UiWhite", 8, 8, 8f, new Vector2(0.5f, 0.5f), (u, v) => Color.white, 1, false);
 
         // Ảnh hiệu ứng: vẽ bằng code (Tools/art/fx_textures.py) hoặc cắt từ bảng vẽ tay (Tools/art/fx_sheet.py); đều là ảnh
         // xám / trắng + alpha, CombatFx tô màu lúc chạy.
@@ -408,7 +438,7 @@ namespace Octopus.EditorTools
 
         // Vật liệu hiệu ứng: additive = cộng sáng (shader hạt dựng sẵn của Unity, URP 2D vẽ được vì pass không gắn LightMode),
         // còn lại = sprite không chịu ánh sáng, hoà trộn thường
-        static Material FxMaterial(string name, bool additive, Texture texture)
+        internal static Material FxMaterial(string name, bool additive, Texture texture)
         {
             Shader shader = additive
                 ? FindShader("Legacy Shaders/Particles/Additive", "Mobile/Particles/Additive")

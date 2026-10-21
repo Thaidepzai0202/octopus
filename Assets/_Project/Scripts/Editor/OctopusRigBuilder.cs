@@ -171,15 +171,29 @@ namespace Octopus.EditorTools
             SetIcon(crawlBody.gameObject, "sv_icon_dot1_pix16_gizmo");
             (AnimationClip clip, OctopusCrawlCurves curves, bool freshClip) = CrawlAssets(root.gameObject);
 
+            // Vệt tốc độ: nhả từ tâm thân, nằm sau thân và xúc tu. Mặt cắt mềm (đậm giữa, mờ dần ra hai mép), đầu vệt hiện dần
+            // (khuất sau đầu nên không lộ mép cắt), đuôi nhỏ lại và tan. OctopusRigAnimator làm mờ cả vệt theo tốc độ / hướng bay
             var trail = new GameObject("Speed Trail").AddComponent<TrailRenderer>();
             trail.transform.SetParent(root, false);
-            trail.sharedMaterial = ArtFactory.Material("Line", null);
+            trail.sharedMaterial = ArtFactory.Material("SpeedTrail", SpeedTrailTexture());
+            trail.textureMode = LineTextureMode.Stretch; // ảnh chỉ đổi theo bề ngang (V), U kéo dài cả vệt
+            trail.alignment = LineAlignment.View;
+            trail.numCapVertices = 0;
             trail.time = 0.2f;
-            trail.minVertexDistance = 0.05f;
-            trail.widthCurve = new AnimationCurve(new Keyframe(0f, 0.5f), new Keyframe(1f, 0f));
+            trail.minVertexDistance = 0.04f;
+            trail.widthCurve = new AnimationCurve(new Keyframe(0f, 0.9f, 0f, -0.6f), new Keyframe(0.35f, 0.6f), new Keyframe(1f, 0f, -0.9f, 0f));
             var fade = new Gradient();
-            fade.SetKeys(new[] { new GradientColorKey(new Color(0.6f, 0.4f, 1f), 0f), new GradientColorKey(new Color(0.6f, 0.4f, 1f), 1f) },
-                new[] { new GradientAlphaKey(0.4f, 0f), new GradientAlphaKey(0f, 1f) });
+            fade.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.88f, 0.9f, 1f), 0f), new GradientColorKey(new Color(0.7f, 0.62f, 1f), 0.4f),
+                    new GradientColorKey(new Color(0.55f, 0.42f, 1f), 1f),
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.65f, 0.14f), new GradientAlphaKey(0.42f, 0.45f),
+                    new GradientAlphaKey(0f, 1f),
+                });
             trail.colorGradient = fade;
             trail.sortingOrder = 4;
             trail.emitting = false;
@@ -219,6 +233,14 @@ namespace Octopus.EditorTools
             animator.SampleCrawlClip(0f);
             return root.gameObject;
         }
+
+        // Mặt cắt ngang của vệt tốc độ (V = bề ngang): mép trong suốt hẳn, mờ dần vào giữa, giữa sáng hơn một chút
+        static Texture2D SpeedTrailTexture() => ArtFactory.Texture("SpeedTrail", 4, 64, TextureWrapMode.Clamp, (u, v) =>
+        {
+            float d = v * 2f - 1f;
+            float body = Mathf.Pow(Mathf.Max(0f, 1f - d * d), 2f);
+            return new Color(1f, 1f, 1f, body * (0.6f + 0.4f * Mathf.Exp(-d * d / 0.06f)));
+        });
 
         // Clip bò Crawl.anim + Animator (để cửa sổ Animation mở được clip) + bản sao đường cong cho game dùng
         static (AnimationClip clip, OctopusCrawlCurves curves, bool fresh) CrawlAssets(GameObject root)

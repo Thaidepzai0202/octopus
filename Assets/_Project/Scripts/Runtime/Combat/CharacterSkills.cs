@@ -39,8 +39,8 @@ namespace Octopus
         /// <summary>Quầng sáng của tơ (trắng ngả hồng)</summary>
         public static readonly Color Silk = new Color(1f, 0.85f, 0.97f);
         public static readonly Color Poison = new Color(0.55f, 1f, 0.35f);
-        /// <summary>Khói độc xanh quanh nhện lúc đẻ bầy nhện con</summary>
-        public static readonly Color PoisonSmoke = new Color(0.4f, 0.85f, 0.2f, 0.75f);
+        /// <summary>Khói độc xanh mỏng sau lưng nhện lúc đẻ bầy nhện con</summary>
+        public static readonly Color PoisonSmoke = new Color(0.4f, 0.85f, 0.2f, 0.4f);
         /// <summary>Bụi đất tung lên khi bật nhảy / tiếp đất</summary>
         public static readonly Color Dust = new Color(0.5f, 0.42f, 0.62f, 0.55f);
 
@@ -49,6 +49,20 @@ namespace Octopus
             c.a = a;
             return c;
         }
+    }
+
+    /// <summary>
+    /// Cỡ / tầm chiêu (SkillContext.Size / Range) của bạch tuộc và nhện. Quy ước chung: khoảng cách tới trước mặt (tâm vùng
+    /// đánh, tầm tìm mục tiêu, quãng bay / lướt) nhân Range; bán kính, khung đánh trúng và cỡ hiệu ứng nhân Size. Điểm gắn
+    /// với thân (miệng, gốc xúc tu) và điểm nằm trên mục tiêu giữ nguyên.
+    /// </summary>
+    static class SkillScale
+    {
+        /// <summary>
+        /// Độ dày vệt chém mảnh (&lt; 0.3 unit) nhân Size nhưng giữ dưới ngưỡng 0.3 của CombatFx.Slash: qua ngưỡng đó CombatFx
+        /// đổi sang ảnh vệt dày có lõi sáng, vệt mảnh lót bên trong sẽ thành một vệt dày nữa chồng lên vệt chính.
+        /// </summary>
+        public static float Thin(float width, float size) => Mathf.Min(width * size, 0.29f);
     }
 
     /// <summary>Chiêu bắn laze (dùng LaserSkill: mắt sáng, tia, tia lửa); mục tiêu trên đường tia mất máu liên tục.</summary>
@@ -63,7 +77,12 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            if (ctx.Laser == null || !ctx.Laser.TryCast(shot))
+            // Cỡ chiêu: tia to gấp Size lần — cả hình tia (LaserBeamView đọc WidthScale) lẫn bề dày vùng trúng bên dưới.
+            // Tầm chiêu: tia dài gấp Range lần ô Range của Laser Skill (vẫn dừng ở vách / sàn)
+            LaserSkill.LaserShot cast = shot;
+            cast.width = (shot.width > 0f ? shot.width : 1f) * ctx.Size;
+            cast.rangeScale = ctx.Range;
+            if (ctx.Laser == null || !ctx.Laser.TryCast(cast))
                 yield break;
             if (scalesWithRage)
                 ctx.Act(CombatPose.Rear, shot.charge + 0.3f);
@@ -103,30 +122,34 @@ namespace Octopus
             int step = _step;
             _step = (_step + 1) % 3;
             Vector2 c = ctx.Center;
+            float size = ctx.Size, far = ctx.Range;
 
             if (step < 2)
             {
                 bool alt = step == 1;
-                ctx.Act(alt ? CombatPose.WhipAlt : CombatPose.Whip, 0.42f, c + ctx.Forward * reach + Vector2.up * (alt ? 0.6f : -0.1f));
+                // Điểm nhắm xa gấp Range lần (cả phần lệch dọc, nên góc quất của xúc tu giữ nguyên như đã chỉnh)
+                ctx.Act(alt ? CombatPose.WhipAlt : CombatPose.Whip, 0.42f, c + (ctx.Forward * reach + Vector2.up * (alt ? 0.6f : -0.1f)) * far);
                 yield return Wait(0.105f); // xúc tu lấy đà vươn cao sau đầu rồi mới quất
                 // Vệt lưỡi liềm theo đường ngọn xúc tu + vệt mảnh bên trong cho dày dặn
-                ctx.Fx?.Slash(c + ctx.Forward * 0.3f, reach * 0.75f, ctx.Angle(alt ? -55f : 75f), ctx.Angle(alt ? 70f : -45f),
-                    SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.55f, 0.26f);
-                ctx.Fx?.Slash(c + ctx.Forward * 0.3f, reach * 0.58f, ctx.Angle(alt ? -45f : 65f), ctx.Angle(alt ? 60f : -35f),
-                    SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.22f, 0.2f, 1f, 0.03f);
-                ctx.HitBox(c + ctx.Forward * (reach * 0.55f), new Vector2(reach * 1.15f, 1.5f), damage,
+                Vector2 arc = c + ctx.Forward * (0.3f * far);
+                ctx.Fx?.Slash(arc, reach * 0.75f * size, ctx.Angle(alt ? -55f : 75f), ctx.Angle(alt ? 70f : -45f),
+                    SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.55f * size, 0.26f);
+                ctx.Fx?.Slash(arc, reach * 0.58f * size, ctx.Angle(alt ? -45f : 65f), ctx.Angle(alt ? 60f : -35f),
+                    SkillColors.OctopusSlash, SkillColors.OctopusEdge, SkillScale.Thin(0.22f, size), 0.2f, 1f, 0.03f);
+                ctx.HitBox(c + ctx.Forward * (reach * 0.55f * far), new Vector2(reach * 1.15f, 1.5f) * size, damage,
                     new HitEffect { knockback = new Vector2(2.5f, alt ? 2f : 0.3f) }, SkillColors.Octopus);
                 yield return Wait(0.185f);
             }
             else
             {
-                Vector2 ground = ctx.Ground(1.4f);
+                Vector2 ground = ctx.Ground(1.4f * far);
                 ctx.Act(CombatPose.Slam, 0.5f, ground);
                 yield return Wait(0.15f);
-                ctx.Fx?.Slash(c + ctx.Forward * 0.6f, 1.1f, ctx.Angle(110f), ctx.Angle(-40f), SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.55f, 0.24f);
+                ctx.Fx?.Slash(c + ctx.Forward * (0.6f * far), 1.1f * size, ctx.Angle(110f), ctx.Angle(-40f), SkillColors.OctopusSlash,
+                    SkillColors.OctopusEdge, 0.55f * size, 0.24f);
                 yield return Wait(0.1f);
-                ctx.Fx?.GroundSlam(ground, 1.4f, SkillColors.OctopusGlow, SkillColors.Rock, 9);
-                ctx.HitCircle(ground + Vector2.up * 0.5f, 1.15f, finisherDamage,
+                ctx.Fx?.GroundSlam(ground, 1.4f * size, SkillColors.OctopusGlow, SkillColors.Rock, 9);
+                ctx.HitCircle(ground + Vector2.up * (0.5f * size), 1.15f * size, finisherDamage,
                     new HitEffect { knockback = new Vector2(3.5f, 4f), heavy = true }, SkillColors.OctopusHeavy);
                 yield return Wait(0.24f);
             }
@@ -146,21 +169,23 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
+            float size = ctx.Size, r = radius * size;
             ctx.Act(CombatPose.Spin, 0.6f);
             for (int i = 0; i < 2; i++)
             {
                 yield return Wait(i == 0 ? 0.12f : 0.2f);
                 // Nhiều vệt lưỡi liềm quấn quanh người ở các bán kính khác nhau
                 float start = 90f + i * 180f, turn = -360f * ctx.Facing;
-                ctx.Fx?.Slash(ctx.Center, radius * 0.85f, start, start + turn, SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.5f, 0.32f, 0.8f);
-                ctx.Fx?.Slash(ctx.Center, radius * 0.6f, start + 60f, start + 60f + turn * 0.8f, SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.3f, 0.28f, 1f, 0.03f);
-                ctx.Fx?.Slash(ctx.Center + Vector2.up * 0.1f, radius, start - 50f, start - 50f + turn * 0.7f, SkillColors.OctopusHeavy,
-                    SkillColors.OctopusEdge, 0.26f, 0.3f, 0.55f, 0.05f);
-                ctx.HitCircle(ctx.Center, radius, damage, new HitEffect { knockback = new Vector2(2.5f, 1f) }, SkillColors.Octopus);
+                ctx.Fx?.Slash(ctx.Center, r * 0.85f, start, start + turn, SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.5f * size, 0.32f, 0.8f);
+                ctx.Fx?.Slash(ctx.Center, r * 0.6f, start + 60f, start + 60f + turn * 0.8f, SkillColors.OctopusSlash, SkillColors.OctopusEdge,
+                    0.3f * size, 0.28f, 1f, 0.03f);
+                ctx.Fx?.Slash(ctx.Center + Vector2.up * (0.1f * size), r, start - 50f, start - 50f + turn * 0.7f, SkillColors.OctopusHeavy,
+                    SkillColors.OctopusEdge, SkillScale.Thin(0.26f, size), 0.3f, 0.55f, 0.05f);
+                ctx.HitCircle(ctx.Center, r, damage, new HitEffect { knockback = new Vector2(2.5f, 1f) }, SkillColors.Octopus);
             }
 
-            ctx.Fx?.Ring(ctx.Center, radius, SkillColors.WithAlpha(SkillColors.Octopus, 0.6f));
-            ctx.Fx?.Shockwave(ctx.Ground(0f), radius, SkillColors.Octopus);
+            ctx.Fx?.Ring(ctx.Center, r, SkillColors.WithAlpha(SkillColors.Octopus, 0.6f));
+            ctx.Fx?.Shockwave(ctx.Ground(0f), r, SkillColors.Octopus);
             yield return Wait(0.2f);
         }
     }
@@ -171,25 +196,31 @@ namespace Octopus
     {
         public float damage = 30f;
         public float range = 6f;
+        // Lực giật về (unit/giây) cho mỗi unit mục tiêu đứng xa: giật dư cũng được vì mục tiêu tự dừng ngay trước mặt
+        const float PullStrength = 12f;
 
         public TentacleHook() => cooldown = 2f;
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            Health target = ctx.NearestAhead(range, 1.8f);
-            Vector2 point = target != null ? SkillContext.Aim(target) : ctx.Center + ctx.Forward * range;
-            ctx.Act(CombatPose.Reach, 0.6f, point);
+            // Tầm móc nhân Range, dải lệch dọc tìm mục tiêu và cỡ hiệu ứng nhân Size; chỗ giật về (trước mặt) giữ nguyên
+            float size = ctx.Size, reach = range * ctx.Range;
+            Health target = ctx.NearestAhead(reach, 1.8f * size);
+            Vector2 point = target != null ? SkillContext.Aim(target) : ctx.Center + ctx.Forward * reach;
+            ctx.Act(CombatPose.Reach, 0.6f, point); // xúc tu tự kéo dài tới điểm móc (rig giới hạn độ dài tối đa)
             yield return Wait(0.08f);
-            ctx.Fx?.Streak(ctx.Center + ctx.Forward * 0.4f, point, SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.3f, 0.22f);
+            ctx.Fx?.Streak(ctx.Center + ctx.Forward * 0.4f, point, SkillColors.OctopusSlash, SkillColors.OctopusEdge, 0.3f * size, 0.22f);
             yield return Wait(0.08f);
             if (target != null && target.IsAlive)
             {
                 float distance = Mathf.Abs(target.transform.position.x - ctx.Center.x);
-                ctx.Fx?.Flash(point, 1.2f, SkillColors.Octopus);
-                ctx.Fx?.Ring(point, 0.7f, SkillColors.Octopus, 0.25f);
-                ctx.Fx?.Streak(point, ctx.Center + ctx.Forward * 0.8f, SkillColors.OctopusHeavy, SkillColors.OctopusEdge, 0.18f, 0.3f);
-                ctx.HitCircle(point, 0.7f, damage,
-                    new HitEffect { knockback = new Vector2(-Mathf.Max(0f, distance - 1.3f) * 5.5f, 1f), stun = 0.6f }, SkillColors.Octopus);
+                ctx.Fx?.Flash(point, 1.2f * size, SkillColors.Octopus);
+                ctx.Fx?.Ring(point, 0.7f * size, SkillColors.Octopus, 0.25f);
+                ctx.Fx?.Streak(point, ctx.Center + ctx.Forward * 0.8f, SkillColors.OctopusHeavy, SkillColors.OctopusEdge, 0.18f * size, 0.3f);
+                // Giật mạnh (xa bao nhiêu cũng kéo về tới nơi); mục tiêu tự dừng ngay trước mặt, không chồng lên người
+                // (bia tập: TrainingDummy.pullStandoff)
+                ctx.HitCircle(point, 0.7f * size, damage,
+                    new HitEffect { knockback = new Vector2(-Mathf.Max(0f, distance - 1f) * PullStrength, 1f), stun = 0.6f }, SkillColors.Octopus);
             }
 
             yield return Wait(0.4f);
@@ -222,14 +253,18 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            Vector2 at = ctx.Center + ctx.Forward * 1.4f;
+            float size = ctx.Size, far = ctx.Range;
+            Vector2 at = ctx.Center + ctx.Forward * (1.4f * far);
+            Vector2 mouth = ctx.Center + ctx.Forward * 0.5f;
             ctx.Act(CombatPose.Squash, 0.45f);
-            ctx.Fx?.Cloud(at, radius, SkillColors.Ink, duration, 14);
-            ctx.Fx?.Spray(ctx.Center + ctx.Forward * 0.5f, ctx.Forward, SkillColors.Ink, 18, 7f, 28f, 0.24f, false, 4f);
-            ctx.Fx?.Spray(ctx.Center + ctx.Forward * 0.5f, ctx.Forward, SkillColors.InkGlow, 8, 6f, 20f, 0.14f, true, 4f);
+            ctx.Fx?.Cloud(at, radius * size, SkillColors.Ink, duration, 14);
+            // Mực bay tới đám mây xa gấp Range lần trong cùng thời gian: tốc độ và trọng lực giọt nhân Range (giữ dáng vòng cung)
+            ctx.Fx?.Spray(mouth, ctx.Forward, SkillColors.Ink, 18, 7f * far, 28f, 0.24f * size, false, 4f * far);
+            ctx.Fx?.Spray(mouth, ctx.Forward, SkillColors.InkGlow, 8, 6f * far, 20f, 0.14f * size, true, 4f * far);
             if (ctx.CanMove)
             {
-                ctx.Body.linearVelocity = new Vector2(-ctx.Facing * dash, 4f);
+                // Bật lùi xa gấp Range lần (cùng thời gian: tốc độ ngang nhân Range, độ nảy lên giữ nguyên) cho ra khỏi đám mực to
+                ctx.Body.linearVelocity = new Vector2(-ctx.Facing * dash * far, 4f);
                 ctx.Player.HoldFacing(1.5f); // lùi mà vẫn nhìn về phía trước
             }
             ctx.Combat.Linger(InkZone(ctx, at));
@@ -238,10 +273,11 @@ namespace Octopus
 
         IEnumerator InkZone(SkillContext ctx, Vector2 at)
         {
+            float r = radius * ctx.Size;
             for (float t = 0f; t < duration; t += 0.3f)
             {
-                ctx.HitCircle(at, radius, damagePerTick, new HitEffect { snare = 0.5f, ink = true }, SkillColors.InkHit, false);
-                ctx.Fx?.Bubbles(at + Random.insideUnitCircle * radius * 0.4f, radius * 0.3f, SkillColors.InkGlow, 2); // bọt tím nổi lên cho dễ thấy vùng mực
+                ctx.HitCircle(at, r, damagePerTick, new HitEffect { snare = 0.5f, ink = true }, SkillColors.InkHit, false);
+                ctx.Fx?.Bubbles(at + Random.insideUnitCircle * r * 0.4f, r * 0.3f, SkillColors.InkGlow, 2); // bọt tím nổi lên cho dễ thấy vùng mực
                 yield return Wait(0.3f);
             }
         }
@@ -273,20 +309,24 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
+            float size = ctx.Size, far = ctx.Range;
             ctx.Act(CombatPose.Rear, 0.75f);
-            ctx.Fx?.Flash(ctx.Center + Vector2.up * 0.8f, 2.4f, SkillColors.OctopusHeavy, 0.5f);
-            ctx.Fx?.Flames(ctx.Ground(0f), 1.6f, SkillColors.OctopusGlow, 0.8f); // lửa tím bùng quanh người lúc rống
-            ctx.Fx?.Cracks(ctx.Ground(0f), 1.3f, SkillColors.OctopusHeavy, 1f);
+            // Quầng sáng và lửa tím bùng sau lưng lúc rống: hào quang quanh bóng bạch tuộc, không phủ lên người
+            ctx.Fx?.Flash(ctx.Center + Vector2.up * 0.8f, 2.4f * size, SkillColors.OctopusHeavy, 0.5f, true);
+            ctx.Fx?.Flames(ctx.Ground(0f), 1.9f * size, SkillColors.OctopusGlow, 0.8f, true);
+            ctx.Fx?.Cracks(ctx.Ground(0f), 1.3f * size, SkillColors.OctopusHeavy, 1f);
             yield return Wait(0.45f);
 
+            // Hàng xúc tu trải xa gấp Range lần (khoảng cách nhân Range); mỗi xúc tu cao / to gấp Size lần (ảnh xúc tu rộng
+            // theo chiều cao)
             int count = tentacles[Mathf.Clamp(ctx.Tier - 1, 0, tentacles.Length - 1)];
-            float height = 2.2f + 0.35f * ctx.Tier;
+            float height = (2.2f + 0.35f * ctx.Tier) * size, width = 1.1f * size;
             for (int i = 0; i < count; i++)
             {
-                Vector2 ground = ctx.Ground(1.1f + i * spacing);
+                Vector2 ground = ctx.Ground((1.1f + i * spacing) * far);
                 ctx.Fx?.Tentacle(ground, height, 1.1f, -ctx.Facing * 8f + Random.Range(-6f, 6f));
-                ctx.Fx?.Eruption(ground, 1.1f, SkillColors.OctopusGlow, SkillColors.Rock, 1.1f); // cọc đá, lửa tím, đá văng
-                ctx.HitBox(ground + Vector2.up * (height * 0.45f), new Vector2(1.1f, height * 0.9f), damage * ctx.Power,
+                ctx.Fx?.Eruption(ground, width, SkillColors.OctopusGlow, SkillColors.Rock, 1.1f); // cọc đá, lửa tím, đá văng
+                ctx.HitBox(ground + Vector2.up * (height * 0.45f), new Vector2(width, height * 0.9f), damage * ctx.Power,
                     new HitEffect { knockback = new Vector2(0.8f, 7f), stun = 1.2f, heavy = true }, SkillColors.OctopusHeavy);
                 yield return Wait(0.11f);
             }
@@ -306,7 +346,8 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            float r = radius + 0.4f * ctx.Tier;
+            float size = ctx.Size;
+            float r = (radius + 0.4f * ctx.Tier) * size;
             ctx.Act(CombatPose.Spin, duration);
             ctx.Fx?.Vortex(ctx.Center, r, SkillColors.Water, duration + 0.2f);
             for (float t = 0f; t < duration; t += 0.18f)
@@ -320,10 +361,11 @@ namespace Octopus
             ctx.Fx?.Ring(ctx.Center, r * 1.2f, SkillColors.Foam, 0.45f);
             ctx.Fx?.Shockwave(ctx.Ground(0f), r * 1.3f, SkillColors.Water, 0.5f);
             ctx.Fx?.Ring(ctx.Center, r * 0.8f, SkillColors.Water, 0.35f);
-            ctx.Fx?.Flash(ctx.Center, 3f, SkillColors.Water, 0.4f);
-            ctx.Fx?.Spray(ctx.Center, Vector2.up, SkillColors.Foam, 30, 10f, 85f, 0.28f, true, 10f);
-            ctx.Fx?.Spray(ctx.Center, Vector2.up, SkillColors.Water, 20, 8f, 70f, 0.3f, false, 10f);
-            ctx.Fx?.Burst(ctx.Center, SkillColors.Foam, 14, 8f, 0.2f, 0.45f);
+            ctx.Fx?.Flash(ctx.Center, 3f * size, SkillColors.Water, 0.4f, true); // chớp sau lưng: bóng bạch tuộc nổi trên nền sáng
+            // Nước bắn to gấp Size lần: cỡ giọt, tốc độ và trọng lực cùng nhân Size (bắn cao / xa gấp Size lần, cùng thời gian)
+            ctx.Fx?.Spray(ctx.Center, Vector2.up, SkillColors.Foam, 30, 10f * size, 85f, 0.28f * size, true, 10f * size);
+            ctx.Fx?.Spray(ctx.Center, Vector2.up, SkillColors.Water, 20, 8f * size, 70f, 0.3f * size, false, 10f * size);
+            ctx.Fx?.Burst(ctx.Center, SkillColors.Foam, 14, 8f * size, 0.2f * size, 0.45f, 6f * size);
             ctx.HitCircle(ctx.Center, r, finisherDamage * ctx.Power,
                 new HitEffect { knockback = new Vector2(6f, 5f), stun = 0.8f, heavy = true }, SkillColors.OctopusHeavy);
             yield return Wait(0.25f);
@@ -367,34 +409,36 @@ namespace Octopus
             int step = _step;
             _step = (_step + 1) % 3;
             Vector2 c = ctx.Center;
+            float size = ctx.Size, far = ctx.Range;
 
             if (step < 2)
             {
                 bool alt = step == 1;
-                ctx.Act(alt ? CombatPose.WhipAlt : CombatPose.Whip, 0.3f, c + ctx.Forward * reach);
+                ctx.Act(alt ? CombatPose.WhipAlt : CombatPose.Whip, 0.3f, c + ctx.Forward * (reach * far));
                 yield return Wait(0.09f);
                 // Đòn 1: 3 vạch cào song song theo đường quét của chân; đòn 2: chân kia bổ một vệt lưỡi liềm hồng dày từ dưới lên
                 if (alt)
-                    ctx.Fx?.Slash(c + ctx.Forward * 0.45f, reach * 0.75f, ctx.Angle(-65f), ctx.Angle(100f), SkillColors.SpiderSlash, SkillColors.SpiderEdge,
-                        0.62f, 0.3f);
+                    ctx.Fx?.Slash(c + ctx.Forward * (0.45f * far), reach * 0.75f * size, ctx.Angle(-65f), ctx.Angle(100f), SkillColors.SpiderSlash,
+                        SkillColors.SpiderEdge, 0.62f * size, 0.3f);
                 else
-                    ctx.Fx?.Claw(c + ctx.Forward * 0.4f, reach * 0.65f, ctx.Angle(80f), ctx.Angle(-35f), SkillColors.SpiderSlash, SkillColors.SpiderEdge,
-                        0.22f, 0.28f, 3, 0.2f);
-                ctx.HitBox(c + ctx.Forward * (reach * 0.55f), new Vector2(reach * 1.1f, 1.3f), damage,
+                    ctx.Fx?.Claw(c + ctx.Forward * (0.4f * far), reach * 0.65f * size, ctx.Angle(80f), ctx.Angle(-35f), SkillColors.SpiderSlash,
+                        SkillColors.SpiderEdge, 0.22f * size, 0.28f, 3, 0.2f * size);
+                ctx.HitBox(c + ctx.Forward * (reach * 0.55f * far), new Vector2(reach * 1.1f, 1.3f) * size, damage,
                     new HitEffect { knockback = new Vector2(1.5f, 0.3f), poisonDps = poisonDps, poisonTime = poisonTime }, SkillColors.Spider);
                 yield return Wait(0.17f);
             }
             else
             {
-                ctx.Act(CombatPose.Lunge, 0.42f, c + ctx.Forward * 1.2f);
+                ctx.Act(CombatPose.Lunge, 0.42f, c + ctx.Forward * (1.2f * far));
                 yield return Wait(0.14f);
-                Vector2 bite = c + ctx.Forward * 1.1f;
+                Vector2 bite = c + ctx.Forward * (1.1f * far);
                 // Hai răng nanh khép lại + độc toé
-                ctx.Fx?.Slash(bite, 0.5f, ctx.Angle(125f), ctx.Angle(15f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.24f, 0.2f);
-                ctx.Fx?.Slash(bite, 0.5f, ctx.Angle(-125f), ctx.Angle(-15f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.24f, 0.2f);
-                ctx.Fx?.Flash(bite, 1f, SkillColors.Poison); // nọc độc xanh toé ở miệng
-                ctx.Fx?.Splash(bite, SkillColors.Poison, 0.9f);
-                ctx.HitBox(bite, new Vector2(1.5f, 1.2f), biteDamage,
+                float fang = 0.5f * size, fangWidth = SkillScale.Thin(0.24f, size);
+                ctx.Fx?.Slash(bite, fang, ctx.Angle(125f), ctx.Angle(15f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, fangWidth, 0.2f);
+                ctx.Fx?.Slash(bite, fang, ctx.Angle(-125f), ctx.Angle(-15f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, fangWidth, 0.2f);
+                ctx.Fx?.Flash(bite, 1f * size, SkillColors.Poison); // nọc độc xanh toé ở miệng
+                ctx.Fx?.Splash(bite, SkillColors.Poison, 0.9f * size);
+                ctx.HitBox(bite, new Vector2(1.5f, 1.2f) * size, biteDamage,
                     new HitEffect { knockback = new Vector2(3f, 1f), poisonDps = poisonDps * 1.5f, poisonTime = poisonTime, heavy = true },
                     SkillColors.Spider);
                 yield return Wait(0.24f);
@@ -415,16 +459,19 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            Health target = ctx.NearestAhead(range);
-            float distance = target != null ? Mathf.Max(0.5f, Mathf.Abs(target.transform.position.x - ctx.Center.x) - 0.8f) : 3.5f;
+            // Tầm tìm con mồi và quãng vồ (khi không có con mồi) nhân Range, cùng thời gian bay (độ cao nhảy giữ nguyên);
+            // có con mồi thì vẫn đáp ngay trước nó
+            float size = ctx.Size, far = ctx.Range;
+            Health target = ctx.NearestAhead(range * far);
+            float distance = target != null ? Mathf.Max(0.5f, Mathf.Abs(target.transform.position.x - ctx.Center.x) - 0.8f) : 3.5f * far;
             Vector2 prey = target != null ? SkillContext.Aim(target) : ctx.Center + ctx.Forward * (distance + 0.8f);
             ctx.Act(CombatPose.Reach, 0.6f, prey); // thu mình lấy đà rồi vươn vuốt về phía con mồi suốt cú nhảy
             yield return Wait(0.07f);
             if (ctx.CanMove)
                 ctx.Body.linearVelocity = new Vector2(ctx.Facing * distance / 0.55f, 8.5f);
             // bật nhảy: bụi đất, sỏi văng sau chân
-            ctx.Fx?.DustCloud(ctx.Ground(0f), 0.8f, SkillColors.Dust, 6);
-            ctx.Fx?.Debris(ctx.Ground(-0.2f), SkillColors.Rock, 5, 3.5f, 0.2f);
+            ctx.Fx?.DustCloud(ctx.Ground(0f), 0.8f * size, SkillColors.Dust, 6);
+            ctx.Fx?.Debris(ctx.Ground(-0.2f), SkillColors.Rock, 5, 3.5f * size, 0.2f * size, 18f * size);
             yield return Wait(0.18f);
             for (float t = 0f; t < 0.8f && ctx.Player.State != OctopusState.Grounded; t += Time.deltaTime)
             {
@@ -432,11 +479,12 @@ namespace Octopus
                 yield return null;
             }
 
-            ctx.Act(CombatPose.Lunge, 0.3f, ctx.Center + ctx.Forward);
-            Vector2 ground = ctx.Ground(0.6f);
-            ctx.Fx?.GroundSlam(ground, 1.1f, SkillColors.Spider, SkillColors.Rock, 7, 0.8f);
-            ctx.Fx?.Claw(ctx.Center + ctx.Forward * 0.7f, 0.7f, ctx.Angle(110f), ctx.Angle(-30f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.16f, 0.26f);
-            ctx.HitCircle(ctx.Center + ctx.Forward * 0.6f, 1.4f, damage,
+            ctx.Act(CombatPose.Lunge, 0.3f, ctx.Center + ctx.Forward * far);
+            Vector2 ground = ctx.Ground(0.6f * far);
+            ctx.Fx?.GroundSlam(ground, 1.1f * size, SkillColors.Spider, SkillColors.Rock, 7, 0.8f);
+            ctx.Fx?.Claw(ctx.Center + ctx.Forward * (0.7f * far), 0.7f * size, ctx.Angle(110f), ctx.Angle(-30f), SkillColors.SpiderSlash,
+                SkillColors.SpiderEdge, 0.16f * size, 0.26f, 3, 0.17f * size);
+            ctx.HitCircle(ctx.Center + ctx.Forward * (0.6f * far), 1.4f * size, damage,
                 new HitEffect { knockback = new Vector2(3f, 2f), stun = 0.4f, heavy = true }, SkillColors.Spider);
             yield return Wait(0.22f);
         }
@@ -453,23 +501,24 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
+            float size = ctx.Size, r = radius * size; // độ cao bật lên giữ nguyên
             ctx.Act(CombatPose.Spin, 0.5f);
             yield return Wait(0.05f); // co chân lấy đà rồi mới bật lên
             if (ctx.CanMove)
                 ctx.Body.linearVelocity = new Vector2(ctx.Body.linearVelocity.x, 7f);
-            ctx.Fx?.DustCloud(ctx.Ground(0f), 0.9f, SkillColors.Dust, 6);
+            ctx.Fx?.DustCloud(ctx.Ground(0f), 0.9f * size, SkillColors.Dust, 6);
             for (int i = 0; i < 2; i++)
             {
                 yield return Wait(i == 0 ? 0.07f : 0.18f);
                 // 8 chân quét: vòng lưỡi liềm hồng quanh người + vết cào ở vòng ngoài
                 float start = -90f + i * 180f, turn = 360f * ctx.Facing;
-                ctx.Fx?.Slash(ctx.Center, radius * 0.75f, start, start + turn, SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.45f, 0.3f, 0.85f);
-                ctx.Fx?.Slash(ctx.Center, radius * 0.5f, start + 120f, start + 120f + turn * 0.8f, SkillColors.SpiderSlash, SkillColors.SpiderEdge,
-                    0.26f, 0.26f, 1f, 0.03f);
-                ctx.Fx?.Claw(ctx.Center, radius * 0.95f, start + 60f, start + 60f + turn * 0.7f, SkillColors.SpiderSlash, SkillColors.SpiderEdge,
-                    0.15f, 0.28f, 3, 0.13f);
-                ctx.HitCircle(ctx.Center, radius, damage, new HitEffect { knockback = new Vector2(1f, 6f) }, SkillColors.Spider);
-                ctx.Fx?.Ring(ctx.Center, radius * 0.9f, SkillColors.WithAlpha(SkillColors.SpiderSlash, 0.7f), 0.3f);
+                ctx.Fx?.Slash(ctx.Center, r * 0.75f, start, start + turn, SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.45f * size, 0.3f, 0.85f);
+                ctx.Fx?.Slash(ctx.Center, r * 0.5f, start + 120f, start + 120f + turn * 0.8f, SkillColors.SpiderSlash, SkillColors.SpiderEdge,
+                    SkillScale.Thin(0.26f, size), 0.26f, 1f, 0.03f);
+                ctx.Fx?.Claw(ctx.Center, r * 0.95f, start + 60f, start + 60f + turn * 0.7f, SkillColors.SpiderSlash, SkillColors.SpiderEdge,
+                    0.15f * size, 0.28f, 3, 0.13f * size);
+                ctx.HitCircle(ctx.Center, r, damage, new HitEffect { knockback = new Vector2(1f, 6f) }, SkillColors.Spider);
+                ctx.Fx?.Ring(ctx.Center, r * 0.9f, SkillColors.WithAlpha(SkillColors.SpiderSlash, 0.7f), 0.3f);
             }
 
             yield return Wait(0.2f);
@@ -489,15 +538,18 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
+            // Cục tơ bay xa gấp Range lần trong cùng thời gian (tốc độ cũng nhân Range), to gấp Size lần
+            float size = ctx.Size, far = ctx.Range;
+            float hitRadius = 0.5f * size, net = 0.9f * size;
             ctx.Act(CombatPose.Rear, 0.35f);
             yield return Wait(0.12f);
-            Vector2 from = ctx.Center + ctx.Forward * 0.5f + Vector2.up * 0.25f;
-            ctx.Fx?.Flash(from, 0.7f, SkillColors.Silk, 0.15f);
-            ctx.Fx?.Projectile(from, ctx.Forward * speed, range, SkillColors.Web, 0.6f, position =>
+            Vector2 from = ctx.Center + ctx.Forward * 0.5f + Vector2.up * 0.25f; // miệng nhện: gắn với thân, không nhân
+            ctx.Fx?.Flash(from, 0.7f * size, SkillColors.Silk, 0.15f);
+            ctx.Fx?.Projectile(from, ctx.Forward * (speed * far), range * far, SkillColors.Web, 0.6f * size, position =>
             {
-                int hit = ctx.HitCircle(position, 0.5f, damage, new HitEffect { snare = snare }, SkillColors.Web);
+                int hit = ctx.HitCircle(position, hitRadius, damage, new HitEffect { snare = snare }, SkillColors.Web);
                 if (hit > 0)
-                    ctx.Fx?.WebNet(position, 0.9f, SkillColors.Web, 0.6f, null, 0.25f, SkillColors.Silk);
+                    ctx.Fx?.WebNet(position, net, SkillColors.Web, 0.6f, null, 0.25f, SkillColors.Silk);
                 return hit > 0;
             });
             yield return Wait(0.25f);
@@ -516,31 +568,37 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            Health target = ctx.NearestAhead(range);
-            Vector2 point = target != null ? SkillContext.Aim(target) : ctx.Center + ctx.Forward * (range * 0.7f) + Vector2.up * 0.4f;
-            ctx.Fx?.Thread(() => ctx.Center, () => point, SkillColors.Web, 0.05f, 0.5f);
-            ctx.Fx?.Thread(() => ctx.Center + Vector2.up * 0.2f, () => point + Vector2.down * 0.2f, SkillColors.Web, 0.035f, 0.45f); // hai sợi tơ
+            // Tầm phi tơ và tốc độ lao nhân Range (lao xa gấp đôi trong cùng thời gian); không có mục tiêu thì điểm bám xa gấp
+            // Range lần theo cùng hướng. Sợi tơ, vệt đá, vùng trúng to gấp Size lần
+            float size = ctx.Size, far = ctx.Range;
+            Health target = ctx.NearestAhead(range * far);
+            Vector2 point = target != null ? SkillContext.Aim(target) : ctx.Center + (ctx.Forward * (range * 0.7f) + Vector2.up * 0.4f) * far;
+            float gap = 0.2f * size;
+            ctx.Fx?.Thread(() => ctx.Center, () => point, SkillColors.Web, 0.05f * size, 0.5f);
+            ctx.Fx?.Thread(() => ctx.Center + Vector2.up * gap, () => point + Vector2.down * gap, SkillColors.Web, 0.035f * size, 0.45f); // hai sợi tơ
             ctx.Act(CombatPose.Reach, 0.45f, point);
             yield return Wait(0.12f);
 
             if (ctx.CanMove)
             {
                 Vector2 to = point - ctx.Center;
-                ctx.Body.linearVelocity = to.normalized * speed + Vector2.up * 2f;
+                ctx.Body.linearVelocity = to.normalized * (speed * far) + Vector2.up * 2f;
                 for (float t = 0f; t < 0.35f && Vector2.Distance(ctx.Center, point) > 1.1f; t += Time.deltaTime)
                 {
                     ctx.Fx?.SpeedLines(ctx.Center, ctx.Body.linearVelocity, SkillColors.SpiderSlash);
                     yield return null;
                 }
-                ctx.Body.linearVelocity *= 0.3f;
+                // Quán tính còn lại như ở tầm ×1 (lao nhanh gấp Range lần thì hãm mạnh hơn), để vẫn dừng ngay trước mục tiêu
+                ctx.Body.linearVelocity *= 0.3f / Mathf.Max(1f, far);
             }
 
             ctx.Act(CombatPose.Lunge, 0.3f, point);
-            ctx.Fx?.Slash(point - ctx.Forward * 0.3f, 0.8f, ctx.Angle(100f), ctx.Angle(-40f), SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.4f, 0.22f);
-            ctx.Fx?.Flash(point, 1.3f, SkillColors.Spider);
-            ctx.Fx?.Ring(point, 0.9f, SkillColors.Spider, 0.3f);
-            ctx.Fx?.Debris(point, SkillColors.Rock, 6, 5f, 0.22f, 14f, ctx.Forward); // đá vỡ văng khỏi mục tiêu
-            ctx.HitCircle(point, 1.1f, damage, new HitEffect { knockback = new Vector2(5f, 3f), heavy = true }, SkillColors.Spider);
+            ctx.Fx?.Slash(point - ctx.Forward * (0.3f * size), 0.8f * size, ctx.Angle(100f), ctx.Angle(-40f), SkillColors.SpiderSlash, SkillColors.SpiderEdge,
+                0.4f * size, 0.22f);
+            ctx.Fx?.Flash(point, 1.3f * size, SkillColors.Spider);
+            ctx.Fx?.Ring(point, 0.9f * size, SkillColors.Spider, 0.3f);
+            ctx.Fx?.Debris(point, SkillColors.Rock, 6, 5f * size, 0.22f * size, 14f * size, ctx.Forward); // đá vỡ văng khỏi mục tiêu
+            ctx.HitCircle(point, 1.1f * size, damage, new HitEffect { knockback = new Vector2(5f, 3f), heavy = true }, SkillColors.Spider);
             yield return Wait(0.2f);
         }
     }
@@ -567,11 +625,12 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            float r = radius + 0.5f * ctx.Tier;
+            float size = ctx.Size;
+            float r = (radius + 0.5f * ctx.Tier) * size;
             ctx.Act(CombatPose.Rear, 0.8f);
-            ctx.Fx?.Flames(ctx.Ground(0f), 1.2f, SkillColors.SpiderEdge, 0.45f); // khí tím đỏ bùng quanh người lúc chồm lên
+            ctx.Fx?.Flames(ctx.Ground(0f), 1.2f * size, SkillColors.SpiderEdge, 0.45f); // khí tím đỏ bùng quanh người lúc chồm lên
             yield return Wait(0.3f);
-            ctx.Fx?.Flash(ctx.Center, 1.8f, SkillColors.Spider, 0.3f);
+            ctx.Fx?.Flash(ctx.Center, 1.8f * size, SkillColors.Spider, 0.3f);
             // vòm lưới phát sáng hồng, để trong (nửa đậm) cho vẫn thấy nhện chồm lên giật tơ bên trong
             ctx.Fx?.WebNet(ctx.Center, r, new Color(SkillColors.Web.r, SkillColors.Web.g, SkillColors.Web.b, 0.5f), 1.5f, null, 0.3f,
                 new Color(SkillColors.Spider.r, SkillColors.Spider.g, SkillColors.Spider.b, 0.45f));
@@ -582,10 +641,11 @@ namespace Octopus
             yield return Wait(0.08f);
             ctx.Fx?.Ring(ctx.Center, r * 1.15f, SkillColors.Spider, 0.45f);
             ctx.Fx?.Shockwave(ctx.Ground(0f), r * 1.2f, SkillColors.Spider, 0.5f);
-            ctx.Fx?.Flash(ctx.Center, 2.4f, SkillColors.Spider, 0.35f);
+            ctx.Fx?.Flash(ctx.Center, 2.4f * size, SkillColors.Spider, 0.35f);
             ctx.Fx?.Silk(ctx.Center, r, SkillColors.Silk, 24); // kén nổ: tơ rách bay tứ tung
-            ctx.Fx?.Burst(ctx.Center, SkillColors.Spider, 16, 8f, 0.22f, 0.5f);
-            ctx.Fx?.Debris(ctx.Center, SkillColors.Rock, 8, 6f, 0.24f);
+            // Tia lửa, đá văng xa / to gấp Size lần (cùng thời gian: tốc độ và trọng lực nhân Size)
+            ctx.Fx?.Burst(ctx.Center, SkillColors.Spider, 16, 8f * size, 0.22f * size, 0.5f, 6f * size);
+            ctx.Fx?.Debris(ctx.Center, SkillColors.Rock, 8, 6f * size, 0.24f * size, 18f * size);
             ctx.HitCircle(ctx.Center, r, burstDamage * ctx.Power, new HitEffect { knockback = new Vector2(4f, 4f), heavy = true }, SkillColors.Spider);
             yield return Wait(0.3f);
         }
@@ -607,25 +667,30 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
+            float size = ctx.Size, far = ctx.Range;
             ctx.Act(CombatPose.Squash, 0.6f);
-            ctx.Fx?.Flash(ctx.Center, 1.4f, SkillColors.Poison, 0.3f);
-            ctx.Fx?.Cloud(ctx.Center + Vector2.up * 0.1f, 1.3f, SkillColors.PoisonSmoke, 1f, 8); // khói độc xanh bốc quanh người
-            ctx.Fx?.Splash(ctx.Ground(0.3f) + Vector2.up * 0.15f, SkillColors.Poison, 1f);
+            // Làn khói độc mỏng sát đất sau lưng nhện mẹ (không che nhện mẹ), vũng độc nhỏ dưới chân
+            ctx.Fx?.Cloud(ctx.Ground(-0.25f) + Vector2.up * 0.25f, 0.7f * size, SkillColors.PoisonSmoke, 0.8f, 5, true);
+            ctx.Fx?.Splash(ctx.Ground(0.3f) + Vector2.up * 0.05f, SkillColors.Poison, 0.5f * size);
             yield return Wait(0.25f);
 
+            // Nhện con bò xa gấp Range lần trong cùng thời gian (tốc độ nhân Range), to gấp Size lần (vùng cắn theo cỡ nhện con)
             int count = counts[Mathf.Clamp(ctx.Tier - 1, 0, counts.Length - 1)];
             float power = ctx.Power;
+            float bite = 0.45f * size, lift = 0.4f * size;
+            Vector2 splash = ctx.Forward * (0.35f * size) + Vector2.up * (0.5f * size);
             for (int i = 0; i < count; i++)
             {
-                Vector2 from = ctx.Ground(Random.Range(-0.2f, 0.4f));
-                ctx.Fx?.Crawler(from, ctx.Facing, speed * Random.Range(0.8f, 1.25f), range, position =>
+                // Từng con chui ra từ dưới bụng mẹ (lệch về phía sau cho kịp thấy cả bầy bò ra), to nhỏ khác nhau
+                Vector2 from = ctx.Ground(Random.Range(-0.4f, 0.2f));
+                ctx.Fx?.Crawler(from, ctx.Facing, speed * far * Random.Range(0.8f, 1.25f), range * far, position =>
                 {
-                    int hit = ctx.HitCircle(position + Vector2.up * 0.4f, 0.45f, biteDamage * power,
+                    int hit = ctx.HitCircle(position + Vector2.up * lift, bite, biteDamage * power,
                         new HitEffect { poisonDps = poisonDps * power, poisonTime = 3f }, SkillColors.Poison);
                     if (hit > 0)
-                        ctx.Fx?.Splash(position + Vector2.up * 0.5f, SkillColors.Poison, 0.6f);
+                        ctx.Fx?.Splash(position + splash, SkillColors.Poison, 0.45f * size); // độc toé trên mục tiêu, không che nhện con
                     return hit > 0;
-                });
+                }, Random.Range(0.85f, 1.05f) * size);
                 yield return Wait(0.06f);
             }
 
@@ -643,8 +708,10 @@ namespace Octopus
 
         public override IEnumerator Run(SkillContext ctx)
         {
-            float r = 2.4f + 0.4f * ctx.Tier;
-            Vector2 at = ctx.Center + ctx.Forward * distance + Vector2.up * 0.3f;
+            // Lưới chụp xa gấp Range lần, to gấp Size lần (độ nâng tâm lưới khỏi mặt đất theo cỡ lưới); chỗ giật về giữ nguyên
+            float size = ctx.Size, far = ctx.Range;
+            float r = (2.4f + 0.4f * ctx.Tier) * size;
+            Vector2 at = ctx.Center + ctx.Forward * (distance * far) + Vector2.up * (0.3f * size);
             var area = new Vector2(r * 2f, r * 1.6f);
             ctx.Act(CombatPose.Rear, 0.5f);
             yield return Wait(0.15f);
@@ -652,11 +719,11 @@ namespace Octopus
             yield return Wait(0.3f);
             ctx.HitBox(at, area, damage * ctx.Power, new HitEffect { snare = 3f }, SkillColors.Web);
             Vector2 anchor = ctx.Center;
-            ctx.Fx?.Thread(() => ctx.Center, () => at, SkillColors.Web, 0.06f, 1.1f);
+            ctx.Fx?.Thread(() => ctx.Center, () => at, SkillColors.Web, 0.06f * size, 1.1f);
             yield return Wait(0.82f);
             ctx.Act(CombatPose.Lunge, 0.3f, anchor);
             yield return Wait(0.08f);
-            ctx.Fx?.Streak(at, anchor + ctx.Forward * 0.6f, SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.3f, 0.3f);
+            ctx.Fx?.Streak(at, anchor + ctx.Forward * 0.6f, SkillColors.SpiderSlash, SkillColors.SpiderEdge, 0.3f * size, 0.3f);
             ctx.Fx?.Silk(at, r * 0.6f, SkillColors.Silk, 14);
             ctx.HitBox(at, area, pullDamage * ctx.Power, new HitEffect { knockback = new Vector2(-6f, 1f), heavy = true }, SkillColors.Spider);
             yield return Wait(0.3f);

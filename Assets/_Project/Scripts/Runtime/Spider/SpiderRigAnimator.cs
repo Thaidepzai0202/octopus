@@ -73,6 +73,9 @@ namespace Octopus
         [SerializeField, Range(0.4f, 2f)] float size = 0.85f;
         [Tooltip("Thời gian quay đầu khi đổi hướng (giây)")]
         [SerializeField, Range(0.05f, 0.6f)] float turnTime = 0.2f;
+        [Tooltip("Quay đầu / lật ngược: đổi chiều ngay giữa lượt, quanh lúc đổi thân chỉ co lại bấy nhiêu phần rồi bung ra " +
+                 "(không bóp dẹt thành sợi chỉ)")]
+        [SerializeField, Range(0f, 0.6f)] float turnSquash = 0.3f;
         [Tooltip("Tâm vật lý cao hơn mặt đất bấy nhiêu (bán kính collider, unit world)")]
         [SerializeField] float groundOffset = 0.5f;
         [Tooltip("Tâm thân cao bấy nhiêu tính từ mặt đất (unit tranh; điểm xoay khi ở trên không / đu)")]
@@ -430,9 +433,11 @@ namespace Octopus
                 ? Mathf.MoveTowards(_hang, snap.Mode == Mode.Cling ? -1f : 1f, dt * 2f / Mathf.Max(hangFlipTime, 0.01f))
                 : snap.Mode == Mode.Cling ? -1f : 1f;
 
-            // Quay đầu / lật ngược: lật qua 0 (bóp dẹt thoáng qua). Tranh nhìn nghiêng sang phải
-            float flip = Mathf.Sign(_flip) * Mathf.Max(Mathf.Abs(_flip), 0.3f);
-            float hang = Mathf.Sign(_hang) * Mathf.Max(Mathf.Abs(_hang), 0.3f);
+            // Quay đầu / lật ngược: không bóp qua 0 (thành sợi chỉ) mà đổi chiều ngay giữa lượt; quanh lúc đổi thân co nhẹ
+            // chiều đang lật, dãn nhẹ chiều kia rồi bung ra như xoay người thật nhanh. Tranh nhìn nghiêng sang phải
+            float turning = 1f - Mathf.Abs(_flip), hanging = 1f - Mathf.Abs(_hang); // 1 = đúng lúc đổi chiều
+            float flip = Mathf.Sign(_flip) * (1f - turnSquash * turning) * (1f + 0.5f * turnSquash * hanging);
+            float hang = Mathf.Sign(_hang) * (1f - turnSquash * hanging) * (1f + 0.5f * turnSquash * turning);
             var scale = new Vector2(flip * size, hang * size);
 
             // Điểm neo q (unit tranh) đặt vào vị trí at (world, tính từ tâm vật lý): chân khi đứng / bám (mặt đất hoặc

@@ -313,7 +313,7 @@ namespace Octopus.EditorTools
         }
 
         // Đáy gần như phẳng trùng mặt dưới collider (chỗ xúc tu bám); đỉnh gồ ghề, nhô lên giữa để nối cột đá
-        static List<Vector2> RockOutline(float width, int seed, out List<Vector2> bottom)
+        internal static List<Vector2> RockOutline(float width, int seed, out List<Vector2> bottom)
         {
             float half = width / 2f + 0.12f;
             var points = new List<Vector2>();
@@ -501,7 +501,7 @@ namespace Octopus.EditorTools
         /// Vẽ hình bóng xám (sẽ được nhuộm màu bằng SpriteRenderer.color): vân đá theo noise, vết nứt,
         /// viền mực ở mép và một dải sáng ở phía có ánh sáng (rimOffset chỉ hướng ngược ánh sáng).
         /// </summary>
-        static Sprite Silhouette(string name, Rect area, float pixelsPerUnit, Vector2 pivotPoint, Func<Vector2, bool> inside,
+        internal static Sprite Silhouette(string name, Rect area, float pixelsPerUnit, Vector2 pivotPoint, Func<Vector2, bool> inside,
             Vector2 rimOffset, int seed)
         {
             int width = Mathf.CeilToInt(area.width * pixelsPerUnit);
@@ -532,7 +532,7 @@ namespace Octopus.EditorTools
             });
         }
 
-        static LineRenderer Rim(Transform parent, string name, List<Vector2> localPoints, Material material, Color color, float width, int sortingOrder)
+        internal static LineRenderer Rim(Transform parent, string name, List<Vector2> localPoints, Material material, Color color, float width, int sortingOrder)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -551,7 +551,7 @@ namespace Octopus.EditorTools
             return line;
         }
 
-        static SpriteRenderer Place(Transform parent, Sprite sprite, Vector2 localPosition, Vector2 scale, Color tint, int sortingOrder, Random flip = null)
+        internal static SpriteRenderer Place(Transform parent, Sprite sprite, Vector2 localPosition, Vector2 scale, Color tint, int sortingOrder, Random flip = null)
         {
             var go = new GameObject(sprite.name);
             go.transform.SetParent(parent, false);
@@ -572,7 +572,7 @@ namespace Octopus.EditorTools
             return Mathf.Exp(-(dx * dx + dy * dy) * 1.6f);
         }
 
-        static Rect Expand(Rect rect, float margin) =>
+        internal static Rect Expand(Rect rect, float margin) =>
             Rect.MinMaxRect(rect.xMin - margin, rect.yMin - margin, rect.xMax + margin, rect.yMax + margin);
 
         static float Next(Random rng, float min, float max) => (float)(min + rng.NextDouble() * (max - min));
@@ -585,7 +585,7 @@ namespace Octopus.EditorTools
             return color;
         }
 
-        static Color Hex(string hex)
+        internal static Color Hex(string hex)
         {
             ColorUtility.TryParseHtmlString("#" + hex, out Color color);
             return color;

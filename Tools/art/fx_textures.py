@@ -15,11 +15,15 @@ Ra:    Assets/_Project/Art/Generated/Fx*.png (CombatBuilder đặt kiểu import
   FxSplat    vũng bắn toé (độc)
   FxWeb      mạng nhện tự nhiên: nan cong, sợi xoắn võng giữa các nan, giọt sương
   FxCocoon   kén tơ quấn chéo nhiều lớp
+  FxSpiderling, FxSpiderlingStep  nhện con nhìn ngang (2 dáng bước), ảnh màu: thân bóng tím sáng, viền + vạch + mắt hồng
+
+Chạy riêng vài ảnh:  python3 Tools/art/fx_textures.py spiderling cocoon
 
 Sao toé tia lửa, chớp tròn, sóng dẹt, xoáy nước, khói, nền nứt vỡ, vệt chém vẽ tay, vết cào: Tools/art/fx_sheet.py
 (cắt từ bảng vẽ tay).
 """
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -462,16 +466,145 @@ def cocoon():
     save("FxCocoon", down(a, ss), down(tone, ss))
 
 
+# ---------------------------------------------------------------- nhện con
+
+def spiderling():
+    """Nhện con (chiêu cuối nhện) nhìn ngang, mặt hướng phải, 2 dáng bước (bò thì đổi qua lại): thân tròn bóng tím (sáng
+    hơn nhện mẹ đen tím), 8 chân gối cao, viền sáng hồng trên lưng, vạch hồng phát sáng trên bụng, mắt hồng, viền tối mỏng
+    quanh cả con. Hình gọn, chân rõ để nhỏ cỡ nào cũng nhận ra là con nhện. Ảnh màu (không tô màu lúc chạy). In ra chỗ cụm
+    mắt (CombatFx.spiderlingEyes)."""
+    w, h, ss = 236, 144, 3
+    u, v = grid(w, h, ss)
+    x, y = u * w - 4, v * h                  # toạ độ pixel ảnh xuất (lệch 4 cho chân sau), y hướng lên
+    px = 1.0 / ss
+
+    def ellipse(cx, cy, rx, ry, rot=0.0):
+        c, s_ = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+        lx, ly = (x - cx) * c + (y - cy) * s_, -(x - cx) * s_ + (y - cy) * c
+        q = np.hypot(lx / rx, ly / ry)
+        return (q - 1) * min(rx, ry), lx / rx, ly / ry, q
+
+    def capsule(a, b, ra, rb):
+        ax, ay = a
+        bx, by = b
+        dx, dy = bx - ax, by - ay
+        t = np.clip(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0, 1)
+        qx, qy = x - (ax + dx * t), y - (ay + dy * t)
+        dist = np.hypot(qx, qy)
+        return dist - (ra + (rb - ra) * t), qy / np.maximum(dist, 1e-4)
+
+    def cover(d):
+        return 1 - smoothstep(-px, px, d)
+
+    def leg(hip, knee, foot, scale):
+        ankle = (knee[0] + (foot[0] - knee[0]) * 0.55 + (foot[0] - hip[0]) * 0.08, knee[1] + (foot[1] - knee[1]) * 0.55 + 5)
+        parts = [capsule(hip, knee, 6.4 * scale, 5.2 * scale), capsule(knee, ankle, 4.8 * scale, 3.6 * scale),
+                 capsule(ankle, foot, 3.2 * scale, 1.3 * scale)]
+        d = np.minimum(np.minimum(parts[0][0], parts[1][0]), parts[2][0])
+        ny = np.choose(np.argmin(np.stack([p[0] for p in parts]), 0), [p[1] for p in parts])
+        joints = sum(np.exp(-(np.hypot(x - jx, y - jy) / (3.2 * scale)) ** 2) for jx, jy in (knee, ankle))
+        return d, ny, joints
+
+    # Nhện con mới nở: tím sáng hơn nhện mẹ (đen tím) cho nổi trên nền hang và trên người mẹ
+    dark = np.array([0.2, 0.08, 0.3])
+    violet = np.array([0.82, 0.45, 1.0])
+    pink = np.array([1.0, 0.42, 0.9])
+    light = np.array([-0.45, 0.65, 0.62])
+    light /= np.linalg.norm(light)
+
+    hips = [(154, 50), (146, 47), (138, 47), (130, 50)]
+    knees = [(188, 100), (166, 112), (112, 110), (76, 100)]
+    feet = [214, 180, 98, 38]
+    eye_spots = [(166, 70, 5.2), (157, 74, 4.6), (172, 63, 3.4), (149, 77, 3.2)]
+
+    for frame, name in enumerate(["FxSpiderling", "FxSpiderlingStep"]):
+        rgb = np.zeros((h * ss, w * ss, 3))
+        alpha = np.zeros((h * ss, w * ss))
+        union = np.full((h * ss, w * ss), 1e3)
+
+        def paint(a, color):
+            nonlocal rgb, alpha
+            rgb = rgb * (1 - a[..., None]) + color * a[..., None]
+            alpha = alpha + a * (1 - alpha)
+
+        def legs(far, which):
+            nonlocal union
+            for i in which:
+                swing = (1 if (i % 2 == 0) != far else -1) * (1 if frame == 0 else -1)   # bước chéo: 1, 3 gần + 2, 4 xa cùng nhịp
+                lift = 5 if swing > 0 else 0
+                sx = 7 if far else 0
+                hip = (hips[i][0] - sx, hips[i][1] + (3 if far else 0))
+                knee = (knees[i][0] - sx + swing * 7, knees[i][1] - (7 if far else 0) + lift)
+                foot = (feet[i] - sx * 1.6 + swing * 14, 7 + lift + (3 if far else 0))
+                d, ny, joints = leg(hip, knee, foot, 0.85 if far else 1.0)
+                a = cover(d)
+                col = dark * (0.7 if far else 1.0) \
+                    + ((violet * 0.6 + pink * 0.4) * (0.45 if far else 1.0))[None, None] * (np.clip(ny + 0.3, 0, 1) ** 2)[..., None] \
+                    * (1 - smoothstep(0.5, 2.8, -d))[..., None] \
+                    + (pink * 0.25)[None, None] * np.clip(joints, 0, 1)[..., None] * (0 if far else 1)
+                paint(a, col)
+                union = np.minimum(union, d)
+
+        legs(True, range(4))
+        legs(False, (2, 3))  # chân sau phía gần: thò ra dưới bụng (bụng che gốc chân cho hình gọn)
+
+        # Bụng (sau) + đầu ngực (trước): khối tròn bóng, ánh sáng trên-trái-trước
+        for cx, cy, rx, ry, rot in [(84, 64, 52, 40, -12), (144, 58, 33, 26, 4)]:
+            d, lx, ly, q = ellipse(cx, cy, rx, ry, rot)
+            nz = np.sqrt(np.clip(1 - q * q, 0, 1))
+            n = np.stack([lx, ly, nz], -1)
+            n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-4)
+            lam = np.clip((n * light).sum(-1), 0, 1)
+            spec = lam ** 40
+            rim = np.clip(ly + 0.2, 0, 1) ** 1.5 * (1 - smoothstep(0, 3.0, -d))      # viền hồng trên lưng
+            col = dark[None, None] + violet[None, None] * (lam ** 4)[..., None] * 0.75 \
+                + np.array([0.95, 0.85, 1.0])[None, None] * spec[..., None] * 0.8 + pink[None, None] * rim[..., None]
+            paint(cover(d), col)
+            union = np.minimum(union, d)
+
+        # Vạch hồng phát sáng dọc lưng bụng (to dần về phía đầu)
+        for k, (cx, cy, r) in enumerate([(60, 92, 4.2), (76, 98, 5.2), (94, 100, 6.0)]):
+            d, _, _, q = ellipse(cx, cy, r * 1.25, r * 0.75, -14)
+            glow = np.exp(-np.clip(d, 0, None) ** 2 / 10) * (union < 0)
+            paint(np.clip(glow * 0.6, 0, 1), pink)
+            paint(cover(d), np.array([1.0, 0.75, 0.97]))
+
+        legs(False, (0, 1))
+
+        # Nanh, chân xúc giác
+        for a_, b_, ra, rb in [((166, 46), (176, 30), 4.0, 1.6), ((171, 50), (186, 40), 3.0, 2.0), ((186, 40), (190, 28), 2.0, 1.2)]:
+            d, ny = capsule(a_, b_, ra, rb)
+            paint(cover(d), dark + violet * 0.5 * np.clip(ny, 0, 1)[..., None] ** 2)
+            union = np.minimum(union, d)
+
+        # Mắt hồng sáng: quầng hồng + tròng hồng + lõi trắng
+        for cx, cy, r in eye_spots:
+            dist = np.hypot(x - cx, y - cy)
+            paint(np.clip(np.exp(-(dist / (r * 1.9)) ** 2) * 0.55, 0, 1), pink)
+            paint(cover(dist - r), pink)
+            paint(cover(dist - r * 0.45), np.array([1.0, 0.92, 1.0]))
+
+        # Viền tối mỏng quanh cả con cho tách khỏi nền
+        outline = cover(union - 2.2) * (1 - alpha)
+        rgb = rgb + np.array([0.03, 0.01, 0.06]) * outline[..., None]
+        alpha = alpha + outline
+        premul = np.dstack([rgb, alpha])
+        small = down(premul, ss)
+        a = small[..., 3]
+        col = np.where(a[..., None] > 1e-4, small[..., :3] / np.maximum(a, 1e-4)[..., None], 0)
+        img = np.dstack([np.clip(col, 0, 1), np.clip(a, 0, 1)])[::-1]
+        OUT.mkdir(parents=True, exist_ok=True)
+        Image.fromarray((img * 255 + 0.5).astype(np.uint8), "RGBA").save(OUT / f"{name}.png", optimize=True)
+        print("ghi", name, w, "x", h)
+
+    ex = sum(e[0] for e in eye_spots[:2]) / 2
+    ey = sum(e[1] for e in eye_spots[:2]) / 2
+    print(f"  mắt (tính từ tâm, theo bề ngang ảnh): ({(ex + 4) / w - 0.5:.3f}, {(ey - h / 2) / w:.3f})")
+
+
 if __name__ == "__main__":
-    spark()
-    slash()
-    ring()
-    crack()
-    rocks()
-    spikes()
-    flame()
-    bubble()
-    drop()
-    splat()
-    web()
-    cocoon()
+    jobs = [spark, slash, ring, crack, rocks, spikes, flame, bubble, drop, splat, web, cocoon, spiderling]
+    wanted = sys.argv[1:]
+    for job in jobs:
+        if not wanted or job.__name__ in wanted:
+            job()

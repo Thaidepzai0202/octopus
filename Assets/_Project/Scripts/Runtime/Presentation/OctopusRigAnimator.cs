@@ -331,15 +331,23 @@ namespace Octopus
 
         [Header("Chiêu laze")]
         [Tooltip("Vận sức thì mắt mở to thêm bao nhiêu (tỉ lệ)")]
-        [SerializeField, Range(0f, 0.4f)] float laserEyeWiden = 0.15f;
+        [SerializeField, Range(0f, 0.4f)] float laserEyeWiden = 0.25f;
         [Tooltip("Vận sức thì con ngươi co lại còn bấy nhiêu phần bề ngang (khe mảnh)")]
-        [SerializeField, Range(0.2f, 1f)] float laserPupilSlit = 0.55f;
+        [SerializeField, Range(0.2f, 1f)] float laserPupilSlit = 0.45f;
         [Tooltip("Bắn xong mắt lim dim bao lâu (giây), như mỏi mắt")]
         [SerializeField, Range(0f, 2f)] float laserTiredTime = 0.8f;
         [Tooltip("Đầu bị đẩy ngả ra sau khi bắn (độ)")]
         [SerializeField, Range(0f, 20f)] float laserRecoil = 6f;
         [Tooltip("Lúc tia bung ra, thân bẹp lại bao nhiêu (giật lùi)")]
         [SerializeField, Range(0f, 0.5f)] float laserKick = 0.18f;
+        [Tooltip("Vận sức: cả người ngả dần ra sau (ngược hướng bắn) tới bấy nhiêu độ lúc sắp bắn. Xúc tu vẫn bám đất")]
+        [SerializeField, Range(0f, 15f)] float laserChargeLean = 5f;
+        [Tooltip("Vận sức: đầu ngửa thêm ra sau bấy nhiêu độ (qua lò xo đầu nên trễ, nảy sau thân)")]
+        [SerializeField, Range(0f, 40f)] float laserChargeNod = 18f;
+        [Tooltip("Vận sức: thân nhổm cao lên bấy nhiêu (unit tranh) và lùi ra sau một chút, xúc tu duỗi ra theo")]
+        [SerializeField, Range(0f, 0.3f)] float laserChargeRise = 0.12f;
+        [Tooltip("Vận sức: cả người run bần bật, mạnh dần tới lúc bắn (unit tranh)")]
+        [SerializeField, Range(0f, 0.06f)] float laserChargeTremble = 0.016f;
 
         [Header("Co giãn (squash & stretch)")]
         [SerializeField] float squashStiffness = 260f;
@@ -350,7 +358,14 @@ namespace Octopus
         [SerializeField, Range(0f, 1f)] float releaseStretch = 0.2f;
 
         [Header("Vệt tốc độ")]
+        [Tooltip("Bay / đu nhanh hơn mức này (unit/giây) mới có vệt")]
         [SerializeField] float speedTrailThreshold = 12f;
+        [Tooltip("Nhanh hơn ngưỡng bấy nhiêu (unit/giây) thì vệt đậm hết mức")]
+        [SerializeField, Min(0.1f)] float speedTrailRamp = 5f;
+        [Tooltip("Rơi / bay gần thẳng đứng (lệch khỏi phương dọc ít hơn góc này, độ) thì vệt tắt dần: vệt dựng đứng sau đầu trông như cái cột")]
+        [SerializeField, Range(0f, 60f)] float speedTrailVerticalCut = 30f;
+        [Tooltip("Vệt hiện ra / mờ đi trong bấy nhiêu giây (không bật tắt đột ngột)")]
+        [SerializeField, Range(0.02f, 0.5f)] float speedTrailFade = 0.12f;
 
         [Header("Kích thước tranh (dựng tự động từ rig.json)")]
         [Tooltip("Tâm vật lý cao hơn mặt đất bấy nhiêu (bán kính collider, unit world)")]
@@ -396,6 +411,17 @@ namespace Octopus
         float _actBlendTime, _actBlendLength = 1f;
         bool _actGround;              // đang ra đòn trên mặt đất / mặt đá: xúc tu không xuyên qua mặt
         Vector2 _actGroundPoint, _actGroundNormal; // mặt đó trong khung đòn (Torso, lật theo hướng đòn)
+        // Dáng vận sức / bắn laze (toạ độ tranh), cộng thêm vào dáng thường và dáng đòn
+        float _laserPose;             // 0..1: đang gồng (đã làm mượt)
+        Vector2 _laserShift;
+        float _laserLean, _laserStretch, _laserNod;
+        float _laserFwd = 1f, _laserAmount = 1f; // hướng bắn trong tranh (1 phải, -1 trái), biên độ theo thời gian vận sức
+        // Vệt tốc độ: độ đậm hiện tại (hiện / tắt dần), màu gốc do builder đặt
+        float _trailStrength, _trailApplied = -1f, _trailWidth;
+        Vector2 _trailFrom;
+        Gradient _trailGradient;
+        GradientColorKey[] _trailColors;
+        GradientAlphaKey[] _trailAlphas, _trailScaled;
         OctopusState _lastState;
         float _previewDelta;
         float _travel;
@@ -415,6 +441,8 @@ namespace Octopus
         float _angle;
         float _flip = 1f;
         float _hang = 1f;     // 1 = đứng thẳng, -1 = treo ngược dưới đá (lật dọc tranh)
+        float _hangRoll;      // đang lật để bám / rời đá: cả con xoay thêm bấy nhiêu độ (lộn nửa vòng thay vì bẹp dí)
+        float _hangDir = -1f; // chiều lộn (dấu góc xoay world), chốt lúc bắt đầu lật
         float _takeoffTimer;
         float _landTimer;
         float _landImpact;
@@ -643,6 +671,7 @@ namespace Octopus
             UpdateSquash(dt);
             UpdateBlend(snap, dt, live);
             UpdateAct(dt, live);
+            UpdateLaserPose(dt, live);
             if (OnSurface(snap.Mode) && UsesCrawlClip && !animationWindow && crawlCurves != null)
                 crawlCurves.Sample(transform, _walkPhase * Mathf.Max(crawlCurves.length, 0.01f));
 
@@ -706,15 +735,65 @@ namespace Octopus
 
             if (glow != null)
                 glow.transform.position = snap.Position + (Vector2)pose.TransformVector(Vector3.up).normalized * (bodyCenter * size - groundOffset);
-            if (speedTrail != null)
-            {
-                speedTrail.transform.position = snap.Position;
-                speedTrail.emitting = playing && snap.Velocity.magnitude > speedTrailThreshold &&
-                                      snap.Mode is Mode.Swing or Mode.Air;
-            }
+            UpdateSpeedTrail(snap, dt, playing);
 
             if (snap.Mode == Mode.Air)
                 _fallSpeed = Mathf.Max(_fallSpeed, -snap.Velocity.y);
+        }
+
+        // Vệt tốc độ khi bay / đu nhanh: nhả ra từ tâm thân (khuất sau đầu nên đầu vệt không lộ mép cắt), hiện / tắt dần
+        // theo tốc độ; rơi / bay gần thẳng đứng thì tắt hẳn (vệt dựng đứng sau đầu trông như cái cột)
+        void UpdateSpeedTrail(Snapshot snap, float dt, bool playing)
+        {
+            if (speedTrail == null)
+                return;
+
+            Vector2 from = torso.TransformPoint(new Vector3(0f, bodyCenter, 0f));
+            if (!playing)
+            {
+                // Ngoài Play: không đụng tới màu / độ rộng (khỏi ghi nhầm vào scene), chỉ đặt chỗ
+                speedTrail.transform.position = from;
+                speedTrail.emitting = false;
+                return;
+            }
+
+            float target = 0f;
+            float speed = snap.Velocity.magnitude;
+            if (snap.Mode is Mode.Swing or Mode.Air && speed > 0.01f)
+            {
+                float fast = Mathf.InverseLerp(speedTrailThreshold, speedTrailThreshold + speedTrailRamp, speed);
+                float tilt = Mathf.Acos(Mathf.Clamp01(Mathf.Abs(snap.Velocity.y) / speed)) * Mathf.Rad2Deg; // 0 = thẳng đứng
+                target = fast * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(speedTrailVerticalCut, speedTrailVerticalCut + 15f, tilt));
+            }
+
+            _trailStrength = Mathf.MoveTowards(_trailStrength, target, dt / speedTrailFade);
+            bool emit = _trailStrength > 0.01f;
+            speedTrail.transform.position = from;
+            // Vừa bật lại, hoặc vừa dịch chuyển tức thời (hồi sinh, đặt lại chỗ): xoá vệt cũ cho khỏi nối thành vạch dài
+            if (emit && (!speedTrail.emitting || (from - _trailFrom).sqrMagnitude > 4f))
+                speedTrail.Clear();
+            speedTrail.emitting = emit;
+            _trailFrom = from;
+
+            // Cả vệt (kể cả đoạn đã nhả) mờ đi và mảnh lại theo độ đậm, giữ màu gốc do builder đặt
+            if (_trailGradient == null)
+            {
+                Gradient source = speedTrail.colorGradient;
+                _trailColors = source.colorKeys;
+                _trailAlphas = source.alphaKeys;
+                _trailScaled = new GradientAlphaKey[_trailAlphas.Length];
+                _trailGradient = new Gradient();
+                _trailWidth = speedTrail.widthMultiplier;
+            }
+
+            if (Mathf.Abs(_trailApplied - _trailStrength) < 0.002f)
+                return;
+            _trailApplied = _trailStrength;
+            for (int i = 0; i < _trailAlphas.Length; i++)
+                _trailScaled[i] = new GradientAlphaKey(_trailAlphas[i].alpha * _trailStrength, _trailAlphas[i].time);
+            _trailGradient.SetKeys(_trailColors, _trailScaled);
+            speedTrail.colorGradient = _trailGradient;
+            speedTrail.widthMultiplier = _trailWidth * Mathf.Lerp(0.6f, 1f, _trailStrength);
         }
 
         // ---------- Trạng thái ----------
@@ -836,8 +915,8 @@ namespace Octopus
 
         Vector2 TorsoOffset(Snapshot snap)
         {
-            // Ra đòn: thân lùi lấy đà, chồm tới, nhổm lên / hạ xuống (xúc tu đang bám đất tự co duỗi theo)
-            Vector2 offset = _actShift;
+            // Ra đòn: thân lùi lấy đà, chồm tới, nhổm lên / hạ xuống (xúc tu đang bám đất tự co duỗi theo); vận sức laze: nhổm, lùi, run
+            Vector2 offset = _actShift + _laserShift;
             if (!OnSurface(snap.Mode))
                 return offset;
 
@@ -892,15 +971,23 @@ namespace Octopus
             else if (snap.Mode is Mode.Ground or Mode.Cling)
                 _flip = Mathf.MoveTowards(_flip, snap.Facing, dt * 2f / Mathf.Max(turnTime, 0.01f));
 
-            // Bám đá: lật ngược người (tranh lật dọc) để xúc tu bám lên đá, đầu chúc ra xa đá. Lật dần như trở mình
+            // Bám đá: lật ngược người (tranh lật dọc) để xúc tu bám lên đá, đầu chúc ra xa đá. Không bẹp dí rồi lật (trông như
+            // một lát mỏng) mà lộn nửa vòng tới trước: nửa đầu xoay tới 90° (thân nằm ngang), giữa chừng đổi sang dáng lật dọc
+            // — lúc thân nằm ngang thì đổi này chỉ là đổi trái / phải của tranh, thân hẹp lại ~0.7 nên không thấy giật — rồi
+            // xoay nốt về treo ngược. Rời đá thì lộn ngược lại
             float hangTarget = snap.Mode == Mode.Cling ? -1f : 1f;
+            if (Mathf.Abs(_hang) >= 1f)
+                _hangDir = snap.Facing < 0f ? 1f : -1f; // quay phải thì lộn theo chiều kim đồng hồ (đầu đi tới trước)
             _hang = live ? Mathf.MoveTowards(_hang, hangTarget, dt * 2f / Mathf.Max(hangFlipTime, 0.01f)) : hangTarget;
+            float roll = 90f * (1f - _hang); // 0 → 180 khi lật từ đứng thẳng sang treo ngược
+            _hangRoll = _hangDir * (_hang >= 0f ? roll : roll - 180f);
+            float turn = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Abs(_hang)); // 1 = giữa chừng (thân nằm ngang)
 
             // Co giãn giữ thể tích: dài ra thì hẹp lại; lật trái / phải, lật ngược bằng scale âm. Ra đòn cộng thêm co giãn của đòn
-            float stretch = 1f + Mathf.Max(-0.5f, _squash + _actStretch);
+            float stretch = 1f + Mathf.Max(-0.5f, _squash + _actStretch + _laserStretch);
             float flip = Mathf.Sign(_flip) * Mathf.Max(Mathf.Abs(_flip), 0.35f);
-            float hang = Mathf.Sign(_hang) * Mathf.Max(Mathf.Abs(_hang), 0.35f);
-            var scale = new Vector2(flip / Mathf.Sqrt(stretch), stretch * hang) * size;
+            float hang = Mathf.Sign(_hang) * (1f + 0.08f * turn);
+            var scale = new Vector2(flip * (1f - 0.3f * turn) / Mathf.Sqrt(stretch), stretch * hang) * size;
 
             // Điểm neo q (unit tranh) đặt vào vị trí at (unit world, tính từ tâm vật lý):
             // chân khi đứng (bẹp xuống mặt đất) hoặc khi treo ngược (chân = chỗ bám trên đá), tâm thân khi bay / đu.
@@ -911,8 +998,8 @@ namespace Octopus
             at = Vector2.Lerp(at, _clingOffset, _clingBlend);
 
             // Thân ngả khi ra đòn tính trong tranh; tranh lật (scale âm) thì chiều xoay world đổi dấu
-            float lean = _actLean * Mathf.Sign(_flip) * Mathf.Sign(_hang);
-            Quaternion rotation = Quaternion.Euler(0f, 0f, _angle + _actSpin + lean);
+            float lean = (_actLean + _laserLean) * Mathf.Sign(_flip) * Mathf.Sign(_hang);
+            Quaternion rotation = Quaternion.Euler(0f, 0f, _angle + _hangRoll + _actSpin + lean);
             pose.localPosition = at - (Vector2)(rotation * Vector2.Scale(scale, q));
             pose.localRotation = rotation;
             pose.localScale = new Vector3(scale.x, scale.y, 1f);
@@ -1540,7 +1627,7 @@ namespace Octopus
         // Vector world → hướng trong tranh (bỏ xoay và lật của Pose), giữ độ lớn
         Vector2 ToArt(Vector2 world)
         {
-            Vector2 art = Quaternion.Euler(0f, 0f, -_angle) * world;
+            Vector2 art = Quaternion.Euler(0f, 0f, -(_angle + _hangRoll)) * world;
             art.x *= Mathf.Sign(_flip);
             art.y *= Mathf.Sign(_hang);
             return art;
@@ -2129,7 +2216,7 @@ namespace Octopus
                     break;
             }
 
-            sway += LaserSway(snap) + _actNod; // ra đòn: đầu ngả theo nhịp đòn (lò xo đầu cho trễ, nảy sau thân)
+            sway += LaserSway() + _laserNod + _actNod; // ra đòn / vận sức: đầu ngả theo (lò xo đầu cho trễ, nảy sau thân)
             for (int i = 0; i < mantle.Count; i++)
             {
                 mantle.targets[i] = mantle.bindAngles[i] + sway * (i == 0 ? 0.2f : 0.45f);
@@ -2694,26 +2781,59 @@ namespace Octopus
                 Kick(-laserKick); // tia bung ra: thân bẹp lại như bị giật lùi
         }
 
-        // Đầu ngả ra sau (ngược hướng bắn) khi đang bắn, run nhẹ khi vận sức
-        float LaserSway(Snapshot snap)
+        // Đầu bị đẩy ngả ra sau (ngược hướng bắn) khi đang bắn, rung theo tia. Góc đầu dương = ngả ra sau khi quay phải
+        // (như đầu ngả khi bò / dáng đòn), nên "ra sau" = cùng dấu với hướng bắn trong tranh
+        float LaserSway()
         {
-            if (_laser == null || !Application.isPlaying)
+            if (_laser == null || !Application.isPlaying || _laser.Phase != LaserPhase.Firing)
                 return 0f;
 
-            float back = -Mathf.Sign(ToArt(_laser.Direction).x);
-            switch (_laser.Phase)
+            float start = Mathf.SmoothStep(0f, 1f, _laser.Elapsed / 0.15f);
+            float end = Mathf.SmoothStep(0f, 1f, (_laser.FireTime - _laser.Elapsed) / 0.25f);
+            return (_laserFwd * laserRecoil + 1.5f * Mathf.Sin(_time * 47f)) * start * end;
+        }
+
+        // Dáng vận sức laze: nhổm lên, ngả người và ngửa đầu ra sau (ngược hướng bắn), run mạnh dần → tia bung thì vẫn gồng
+        // một phần, đầu bị đẩy ra sau → tắt tia thì về dáng thường. Xúc tu vẫn bám đất (IK tự duỗi theo thân).
+        // Biên độ theo thời gian vận sức (quét laze vận sức ngắn thì gồng nhẹ, nhanh); đang ra đòn cùng lúc (đại pháo chồm lên)
+        // thì phần thân giảm bớt để cộng với dáng đòn không quá đà
+        void UpdateLaserPose(float dt, bool live)
+        {
+            if (!live || !Application.isPlaying)
+                return;
+
+            float target = 0f, tremble = 0f;
+            if (_laser != null && _laser.Phase is LaserPhase.Charging or LaserPhase.Firing)
             {
-                case LaserPhase.Charging:
-                    return 1.2f * _laser.PhaseProgress * Mathf.Sin(_time * 60f);
-                case LaserPhase.Firing:
+                _laserFwd = Mathf.Sign(ToArt(_laser.Direction).x + 1e-4f);
+                _laserAmount = Mathf.Lerp(0.6f, 1f, Mathf.InverseLerp(0.3f, 0.9f, _laser.ChargeTime));
+                if (_laser.Phase == LaserPhase.Charging)
                 {
-                    float start = Mathf.SmoothStep(0f, 1f, _laser.Elapsed / 0.15f);
-                    float end = Mathf.SmoothStep(0f, 1f, (_laser.FireTime - _laser.Elapsed) / 0.25f);
-                    return (back * laserRecoil + 1.5f * Mathf.Sin(_time * 47f)) * start * end;
+                    float p = _laser.PhaseProgress;
+                    target = 1f - (1f - p) * (1f - p); // vào thế nhanh rồi gồng dần tới lúc bắn
+                    tremble = p * p;
                 }
-                default:
-                    return 0f;
+                else
+                {
+                    float t = _laser.Elapsed;
+                    float end = Mathf.SmoothStep(0f, 1f, (_laser.FireTime - t) / 0.3f);
+                    target = Mathf.Lerp(1f, 0.55f, Mathf.SmoothStep(0f, 1f, t / 0.2f)) * end;
+                    tremble = 0.35f * end;
+                }
             }
+
+            _laserPose = Mathf.Lerp(_laserPose, target, 1f - Mathf.Exp(-dt / 0.06f));
+            float w = _laserPose * _laserAmount;
+            float body = w * (1f - 0.6f * _actEngage);
+            _laserLean = laserChargeLean * body * _laserFwd;
+            _laserNod = laserChargeNod * w * (1f - 0.4f * _actEngage) * _laserFwd;
+            _laserShift = new Vector2(-0.4f * _laserFwd, 1f) * (laserChargeRise * body);
+            _laserStretch = 0.5f * laserChargeRise * body;
+
+            // Run: lệch nhỏ, đổi liên tục (vài tần số lệch nhau nên không thành nhịp đều)
+            float shake = laserChargeTremble * tremble * _laserAmount;
+            _laserShift += new Vector2(Mathf.Sin(_time * 67f) + 0.5f * Mathf.Sin(_time * 113f + 2f), 0.8f * Mathf.Sin(_time * 89f + 1f)) * shake;
+            _laserLean += 60f * shake * Mathf.Sin(_time * 53f + 0.5f);
         }
 
         void OnJumped()

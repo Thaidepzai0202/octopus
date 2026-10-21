@@ -5,8 +5,9 @@ namespace Octopus
 {
     /// <summary>
     /// Vẽ chiêu laze theo trạng thái của LaserSkill:
-    ///  - Vận sức: mắt sáng dần, hạt năng lượng tím hút vào mắt, tia sét lách tách quanh đầu.
-    ///  - Bắn: tia mảnh rồi bung thành chùm laze (quầng tím, giữa xanh, lõi trắng) rung nhẹ, chớp sáng ở mắt,
+    ///  - Vận sức: quầng tím rực dần quanh người, mắt sáng dần tới trắng chói, vòng sáng co dần vào mắt, vệt năng lượng
+    ///    bị hút vào mắt, tia sét tím đánh quanh đầu ngày càng dày; ngay trước khi bắn mắt co lại một nhịp.
+    ///  - Bắn: vòng sáng bung ra ở mắt, tia mảnh rồi bung thành chùm laze (quầng tím, giữa xanh, lõi trắng) rung nhẹ, chớp sáng ở mắt,
     ///    hạt sáng bay quanh tia, tia lửa bắn ra ở chỗ trúng.
     ///  - Tắt: tia co lại, mắt nguội dần, khói bốc lên.
     /// Các bộ phận (LineRenderer, SpriteRenderer) tự tạo lúc chạy từ vật liệu / sprite đã gán sẵn.
@@ -21,6 +22,8 @@ namespace Octopus
         [Tooltip("Ngôi sao 4 cánh: chớp sáng ở mắt và chỗ tia trúng")]
         [SerializeField] Sprite flare;
         [SerializeField] Sprite smoke;
+        [Tooltip("Vòng sáng: co dần vào mắt khi vận sức, bung ra khi tia bắn")]
+        [SerializeField] Sprite ring;
 
         [Header("Màu")]
         [SerializeField] Color outerColor = new Color(0.55f, 0.22f, 1f, 0.6f);
@@ -35,16 +38,28 @@ namespace Octopus
         [Tooltip("Tia bung từ sợi mảnh thành chùm to trong bấy nhiêu giây")]
         [SerializeField] float burstTime = 0.2f;
 
+        [Header("Vận sức")]
+        [Tooltip("Tầm quanh mắt (unit) mà tia sét, vệt năng lượng, vòng sáng toả ra / hút vào (chiêu tia to thì to theo)")]
+        [SerializeField, Min(0.2f)] float chargeRadius = 1.1f;
+        [Tooltip("Quầng tím rực quanh người lúc sắp bắn (đường kính, unit)")]
+        [SerializeField, Min(0f)] float auraSize = 3f;
+        [Tooltip("Số vệt năng lượng hút vào mắt mỗi giây: lúc mới vận sức → lúc sắp bắn")]
+        [SerializeField] Vector2 chargeMotes = new Vector2(24f, 120f);
+
         [Header("Thứ tự vẽ")]
         [Tooltip("Tia nằm sau đầu (thân = 10) để như bắn ra từ mắt; trước các xúc tu")]
         [SerializeField] int beamOrder = 9;
         [Tooltip("Chớp sáng, hạt, sét, khói nằm trước mặt")]
         [SerializeField] int frontOrder = 13;
+        [Tooltip("Quầng tím lúc vận sức nằm sau cả con (sau xúc tu, chân nhện)")]
+        [SerializeField] int auraOrder = -6;
 
         const int BeamPoints = 20;
-        const int ArcCount = 3;
-        const int ArcPoints = 7;
-        const int MaxParticles = 96;
+        const int ArcCount = 6;
+        const int ArcPoints = 9;
+        const int RingCount = 3;
+        const int MaxParticles = 160;
+        const float RingRadius = 1.19f; // bán kính nét vòng của ảnh UiRing ở scale 1 (unit)
 
         enum Kind { Mote, Spark, Smoke }
 
@@ -58,9 +73,11 @@ namespace Octopus
 
         LineRenderer _outer, _mid, _core;
         readonly LineRenderer[] _arcs = new LineRenderer[ArcCount];
+        readonly LineRenderer[] _arcGlows = new LineRenderer[ArcCount]; // quầng tím mờ bao quanh nét sét
+        readonly SpriteRenderer[] _rings = new SpriteRenderer[RingCount];
         readonly float[] _arcTimer = new float[ArcCount];
         readonly bool[] _arcOn = new bool[ArcCount];
-        SpriteRenderer _eyeGlow, _eyeFlare, _hitGlow, _hitFlare;
+        SpriteRenderer _eyeGlow, _eyeCore, _eyeFlare, _hitGlow, _hitFlare, _aura;
         readonly List<Particle> _particles = new List<Particle>(MaxParticles);
         SpriteRenderer[] _particleSprites;
         readonly Vector3[] _points = new Vector3[BeamPoints];
@@ -98,11 +115,17 @@ namespace Octopus
 
             for (int i = 0; i < ArcCount; i++)
             {
+                _arcGlows[i] = Line($"Spark Arc Glow {i}", frontOrder);
+                _arcGlows[i].positionCount = ArcPoints;
                 _arcs[i] = Line($"Spark Arc {i}", frontOrder);
                 _arcs[i].positionCount = ArcPoints;
             }
 
+            _aura = Sprite("Charge Aura", glow, auraOrder);
+            for (int i = 0; i < RingCount; i++)
+                _rings[i] = Sprite($"Charge Ring {i}", ring != null ? ring : glow, frontOrder);
             _eyeGlow = Sprite("Eye Glow", glow, frontOrder);
+            _eyeCore = Sprite("Eye Core", glow, frontOrder);
             _eyeFlare = Sprite("Eye Flare", flare != null ? flare : glow, frontOrder);
             _hitGlow = Sprite("Hit Glow", glow, frontOrder);
             _hitFlare = Sprite("Hit Flare", flare != null ? flare : glow, frontOrder);
@@ -148,9 +171,11 @@ namespace Octopus
         void HideAll()
         {
             _outer.enabled = _mid.enabled = _core.enabled = false;
-            foreach (LineRenderer arc in _arcs)
-                arc.enabled = false;
-            _eyeGlow.enabled = _eyeFlare.enabled = _hitGlow.enabled = _hitFlare.enabled = false;
+            for (int i = 0; i < ArcCount; i++)
+                _arcs[i].enabled = _arcGlows[i].enabled = false;
+            foreach (SpriteRenderer r in _rings)
+                r.enabled = false;
+            _eyeGlow.enabled = _eyeCore.enabled = _eyeFlare.enabled = _hitGlow.enabled = _hitFlare.enabled = _aura.enabled = false;
         }
 
         void LateUpdate()
@@ -167,6 +192,15 @@ namespace Octopus
 
             if (phase != _lastPhase && phase == LaserPhase.Firing)
                 Burst(origin, skill.Direction, 14, Kind.Spark); // tia vừa bung: tia lửa toé ra ở mắt
+            if (phase != _lastPhase && phase == LaserPhase.Charging)
+            {
+                // Lần vận sức mới: tia sét vẽ lại từ đầu (không hiện lại tia cũ ở chỗ cũ)
+                for (int i = 0; i < ArcCount; i++)
+                {
+                    _arcOn[i] = false;
+                    _arcTimer[i] = 0f;
+                }
+            }
             _lastPhase = phase;
 
             HideAll();
@@ -194,60 +228,99 @@ namespace Octopus
 
         void DrawCharge(Vector2 eye, float p, float dt)
         {
-            float pulse = 1f + 0.18f * Mathf.Sin(_time * Mathf.Lerp(10f, 40f, p));
+            // Chiêu tia to (đại pháo) thì quầng, sét to theo, mắt to vừa phải (không che hết đầu); càng gần lúc bắn càng dồn dập
+            float k = Mathf.Sqrt(Mathf.Max(skill.WidthScale, 0.5f));
+            float g = Mathf.Sqrt(k);
+            float radius = chargeRadius * k;
+            float e = 1f - (1f - p) * (1f - p); // sáng lên ngay khi bấm, rồi tăng dần
+            float pulse = 1f + (0.08f + 0.14f * p) * Mathf.Sin(_time * Mathf.Lerp(12f, 46f, p));
+            float pinch = 1f - 0.3f * Mathf.SmoothStep(0f, 1f, (p - 0.86f) / 0.14f); // ngay trước khi bắn: co lại một nhịp
             Color color = Color.Lerp(chargeColor, coreColor, p * p);
-            Show(_eyeGlow, eye, Mathf.Lerp(0.45f, 1.3f, p) * pulse, WithAlpha(color, Mathf.Lerp(0.35f, 0.9f, p)), 0f);
-            if (p > 0.6f)
+
+            // Quầng tím sau lưng: cả con rực lên
+            Show(_aura, eye, auraSize * k * Mathf.Lerp(0.45f, 1f, e) * (1f + 0.05f * Mathf.Sin(_time * 23f)),
+                WithAlpha(chargeColor, Mathf.Lerp(0.1f, 0.42f, e)), 0f);
+
+            // Mắt: quầng sáng to dần, lõi trắng chói dần, sao 4 cánh hiện ra ở nửa sau
+            Show(_eyeGlow, eye, Mathf.Lerp(0.45f, 1.2f, e) * g * pulse * pinch, WithAlpha(color, Mathf.Lerp(0.4f, 0.85f, e)), 0f);
+            Show(_eyeCore, eye, Mathf.Lerp(0.14f, 0.45f, e) * g * pulse * pinch, WithAlpha(coreColor, Mathf.Lerp(0.5f, 1f, e)), 0f);
+            if (p > 0.35f)
             {
-                float f = (p - 0.6f) / 0.4f;
-                Show(_eyeFlare, eye, Mathf.Lerp(0.2f, 0.9f, f) * pulse, WithAlpha(coreColor, f), _time * 120f);
+                float f = (p - 0.35f) / 0.65f;
+                Show(_eyeFlare, eye, Mathf.Lerp(0.25f, 1f, f) * g * pulse * pinch, WithAlpha(coreColor, Mathf.Min(1f, f * 1.6f)), _time * 150f);
             }
 
-            // Hạt năng lượng hút vào mắt, càng gần lúc bắn càng dày
-            for (int i = Emit(ref _chargeDebt, Mathf.Lerp(14f, 70f, p), dt); i > 0; i--)
+            // Vòng sáng co dần vào mắt (gom năng lượng): càng tới gần mắt càng nhanh. Vận sức lâu thì nhiều đợt hơn
+            float waves = Mathf.Max(1f, skill.ChargeTime / 0.35f);
+            for (int i = 0; i < RingCount; i++)
             {
-                Vector2 from = eye + Random.insideUnitCircle.normalized * Random.Range(0.8f, 1.5f);
-                Vector2 swirl = Vector2.Perpendicular(eye - from).normalized * Random.Range(-1f, 1f);
+                float start = i / (float)RingCount;
+                float phase = p * waves - start;
+                if (phase < 0f)
+                    continue; // đợt này chưa tới
+                phase = Mathf.Repeat(phase, 1f);
+                float r = Mathf.Lerp(chargeRadius * g, 0.1f, phase * phase);
+                float alpha = Mathf.Pow(Mathf.Sin(Mathf.PI * phase), 0.7f) * Mathf.Lerp(0.15f, 0.4f, e);
+                ShowRing(_rings[i], eye, r, WithAlpha(Color.Lerp(chargeColor, coreColor, 0.15f + 0.45f * phase), alpha));
+            }
+
+            // Vệt năng lượng bị hút vào mắt, càng gần lúc bắn càng dày
+            for (int i = Emit(ref _chargeDebt, Mathf.Lerp(chargeMotes.x, chargeMotes.y, p) * k, dt); i > 0; i--)
+            {
+                Vector2 from = eye + Random.insideUnitCircle.normalized * (Random.Range(0.9f, 1.8f) * radius);
+                Vector2 swirl = Vector2.Perpendicular(eye - from).normalized * Random.Range(-1.2f, 1.2f);
                 Add(new Particle
                 {
-                    Kind = Kind.Mote, Position = from, Velocity = (eye - from).normalized * 0.6f + swirl,
-                    MaxLife = 0.6f, Size = Random.Range(0.14f, 0.26f), Color = RandomEnergyColor(),
+                    Kind = Kind.Mote, Position = from, Velocity = (eye - from).normalized * Random.Range(0.8f, 1.6f) + swirl,
+                    MaxLife = 0.7f, Size = Random.Range(0.1f, 0.2f) * k, Color = RandomEnergyColor(),
                 });
             }
 
-            // Tia sét lách tách quanh đầu: mỗi tia chớp tắt ngẫu nhiên, hình gấp khúc đổi liên tục
+            // Tia sét tím: nửa đánh từ quanh đầu vào mắt, nửa bò vòng quanh đầu; mỗi tia chớp tắt ngẫu nhiên, hình gấp khúc
+            // đổi liên tục, càng gần lúc bắn càng nhiều tia, càng to
             for (int i = 0; i < ArcCount; i++)
             {
                 _arcTimer[i] -= dt;
                 if (_arcTimer[i] <= 0f)
                 {
-                    _arcTimer[i] = Random.Range(0.04f, 0.09f);
-                    _arcOn[i] = Random.value < 0.25f + 0.65f * p;
+                    _arcTimer[i] = Random.Range(0.035f, 0.08f);
+                    _arcOn[i] = Random.value < 0.2f + 0.75f * p;
                     if (_arcOn[i])
-                        Lightning(_arcs[i], eye, p);
+                        Lightning(i, eye, radius, p, k);
                 }
 
-                _arcs[i].enabled = _arcOn[i];
+                _arcs[i].enabled = _arcGlows[i].enabled = _arcOn[i];
             }
         }
 
-        void Lightning(LineRenderer arc, Vector2 eye, float p)
+        void Lightning(int index, Vector2 eye, float radius, float p, float k)
         {
-            Vector2 a = eye + Random.insideUnitCircle.normalized * Random.Range(0.12f, 0.35f);
-            Vector2 b = eye + Random.insideUnitCircle.normalized * Random.Range(0.5f, 1.05f);
-            Vector2 across = Vector2.Perpendicular(b - a).normalized;
+            LineRenderer core = _arcs[index], halo = _arcGlows[index];
+            float from = Random.Range(0f, 2f * Mathf.PI);
+            bool inward = Random.value < 0.5f;
+            float to = inward ? from + Random.Range(-0.4f, 0.4f) : from + Random.Range(0.6f, 1.4f) * (Random.value < 0.5f ? -1f : 1f);
+            float r0 = (inward ? Random.Range(0.6f, 1f) : Random.Range(0.45f, 0.95f)) * radius;
+            float r1 = inward ? Random.Range(0.08f, 0.2f) * radius : r0 * Random.Range(0.8f, 1.2f);
+            float jag = 0.12f * radius;
             for (int j = 0; j < ArcPoints; j++)
             {
                 float u = j / (ArcPoints - 1f);
-                float jag = j == 0 || j == ArcPoints - 1 ? 0f : Random.Range(-0.09f, 0.09f);
-                arc.SetPosition(j, Vector2.Lerp(a, b, u) + across * jag);
+                float a = Mathf.Lerp(from, to, u);
+                float r = Mathf.Lerp(r0, r1, u) + (j == 0 || j == ArcPoints - 1 ? 0f : Random.Range(-jag, jag));
+                Vector3 point = eye + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
+                core.SetPosition(j, point);
+                halo.SetPosition(j, point);
             }
 
-            float width = Random.Range(0.07f, 0.12f) * (0.6f + 0.6f * p);
-            arc.startWidth = width;
-            arc.endWidth = width * 0.3f;
-            arc.startColor = WithAlpha(Color.Lerp(chargeColor, coreColor, 0.5f), 0.95f);
-            arc.endColor = WithAlpha(chargeColor, 0.6f);
+            float width = Random.Range(0.04f, 0.065f) * (0.7f + 0.7f * p) * k;
+            core.startWidth = width;
+            core.endWidth = width * 0.5f;
+            core.startColor = WithAlpha(Color.Lerp(coreColor, chargeColor, 0.3f), 1f);
+            core.endColor = WithAlpha(Color.Lerp(coreColor, chargeColor, 0.6f), 0.85f);
+            halo.startWidth = width * 5f;
+            halo.endWidth = width * 3f;
+            halo.startColor = WithAlpha(chargeColor, 0.55f);
+            halo.endColor = WithAlpha(chargeColor, 0.3f);
         }
 
         // ---------- Bắn ----------
@@ -273,6 +346,14 @@ namespace Octopus
             SetBeam(_outer, origin, dir, length, outerWidth * width * scale, outerColor, 0.05f * scale, 9f / scale);
             SetBeam(_mid, origin, dir, length, midWidth * width * scale, midColor, 0.025f * scale, 13f / scale);
             SetBeam(_core, origin, dir, length, coreWidth * width * scale, coreColor, 0f, 0f);
+
+            // Tia vừa bung: vòng sáng nở ra ở mắt
+            if (t < 0.3f)
+            {
+                float f = t / 0.3f;
+                ShowRing(_rings[0], origin, Mathf.Lerp(0.25f, 1.8f, 1f - (1f - f) * (1f - f)) * Mathf.Sqrt(scale),
+                    WithAlpha(Color.Lerp(coreColor, chargeColor, f), 0.5f * (1f - f)));
+            }
 
             // Chớp sáng ở mắt
             float flicker = 1f + 0.12f * Mathf.Sin(_time * 61f);
@@ -385,10 +466,11 @@ namespace Octopus
                 switch (p.Kind)
                 {
                     case Kind.Mote when skill.Phase == LaserPhase.Charging:
-                        // Bị hút vào mắt, càng gần càng nhanh; tới mắt thì tan
+                        // Bị hút vào mắt, càng gần càng nhanh; tới mắt (hoặc vụt qua mắt) thì tan
                         Vector2 pull = eye - p.Position;
-                        p.Velocity += pull.normalized * (14f * dt);
-                        if (pull.magnitude < 0.07f)
+                        p.Velocity += pull.normalized * (20f * dt);
+                        float near = pull.magnitude;
+                        if (near < 0.1f || (near < 0.35f && Vector2.Dot(pull, p.Velocity) < 0f))
                             p.Life = 0f;
                         break;
                     case Kind.Spark:
@@ -407,6 +489,7 @@ namespace Octopus
                     _particles[i] = p;
             }
 
+            bool charging = skill.Phase == LaserPhase.Charging;
             for (int i = 0; i < MaxParticles; i++)
             {
                 SpriteRenderer renderer = _particleSprites[i];
@@ -424,6 +507,15 @@ namespace Octopus
                 renderer.color = WithAlpha(p.Color, p.Color.a * alpha);
                 Transform t = renderer.transform;
                 t.position = p.Position;
+                if (p.Kind == Kind.Mote && charging)
+                {
+                    // Đang bị hút vào mắt: kéo dài thành vệt theo hướng bay
+                    float speed = p.Velocity.magnitude;
+                    t.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(p.Velocity.y, p.Velocity.x) * Mathf.Rad2Deg);
+                    t.localScale = new Vector3(p.Size * (1f + 0.22f * speed), p.Size * 0.75f, 1f);
+                    continue;
+                }
+
                 t.rotation = Quaternion.Euler(0f, 0f, p.Spin * age);
                 t.localScale = Vector3.one * p.Size * (p.Kind == Kind.Spark ? 1f : 1f + 0.3f * Mathf.Sin(_time * 20f + i));
             }
@@ -440,6 +532,10 @@ namespace Octopus
             t.localScale = Vector3.one * size;
             renderer.color = color;
         }
+
+        // Vòng sáng bán kính radius (unit, tính tới nét vòng)
+        static void ShowRing(SpriteRenderer renderer, Vector2 at, float radius, Color color) =>
+            Show(renderer, at, radius / RingRadius, color, 0f);
 
         Color RandomEnergyColor()
         {

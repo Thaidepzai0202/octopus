@@ -16,6 +16,8 @@ namespace Octopus
         [SerializeField, Min(0f)] float perUnitMoved = 2.5f;
         [Tooltip("Nộ tăng thêm mỗi điểm sát thương gây ra (chiêu cuối không cộng nộ)")]
         [SerializeField, Min(0f)] float perDamage = 0.35f;
+        [Tooltip("Nộ tăng thêm mỗi điểm máu bị mất (bị boss đánh): bị dồn ép thì nhanh có chiêu cuối để lật thế")]
+        [SerializeField, Min(0f)] float perDamageTaken = 0.5f;
         [Tooltip("Chiêu cuối mạnh gấp mấy lần ở mốc 1, 2, 3")]
         [SerializeField] float[] tierMultiplier = { 1f, 1.7f, 2.6f };
 
@@ -52,6 +54,9 @@ namespace Octopus
         }
 
         public void AddFromDamage(float damage) => Add(damage * perDamage);
+
+        /// <summary>Bị đánh mất damage máu: cộng nộ theo perDamageTaken.</summary>
+        public void AddFromDamageTaken(float damage) => Add(damage * perDamageTaken);
 
         public void Add(float amount)
         {

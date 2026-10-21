@@ -7,9 +7,13 @@ namespace Octopus
     /// <summary>
     /// Dịch chuột / cảm ứng thành cử chỉ: nhấn, chạm nhanh (tap), giữ (hold), vuốt ngang (drag).
     /// Các component khác chỉ đọc kết quả, nên đổi sơ đồ điều khiển chỉ cần sửa file này.
-    /// Bàn phím để thử trong Editor: A/D hoặc ←/→ = vuốt, W hoặc ↑ = giữ, Space = tap; 1 / 2 / 3 = nút chiêu (giữ một số rồi
-    /// bấm số khác = vuốt từ nút này sang nút kia), R = thêm nộ để thử chiêu cuối.
+    /// Bàn phím để thử trong Editor: A/D hoặc ←/→ = vuốt, W hoặc ↑ = giữ, Space = tap; J / K / L = nút chiêu 1 / 2 / 3 (giữ một
+    /// phím rồi bấm phím kia = vuốt từ nút này sang nút kia), R = thêm nộ để thử chiêu cuối.
     /// Chạm bắt đầu trên nút trên màn hình (nút chiêu…) thì bỏ qua cả lần chạm đó, để bấm nút không làm nhảy / bắn xúc tu.
+    ///
+    /// Nhân vật người (RED, PINK, BLUE) dùng cần điều hướng + nút nhảy thay cho cử chỉ: Stick (cần trên màn hình
+    /// VirtualJoystick gửi vào bằng SetStick, hoặc A / D, W / S, phím mũi tên), Run / Aim (chạy, kéo lên / xuống đổi kiểu chiêu),
+    /// JumpHeld / JumpPressedThisFrame (nút NHẢY trên màn hình gửi vào bằng SetJumpButton, hoặc Space).
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class PlayerInputReader : MonoBehaviour
@@ -22,8 +26,11 @@ namespace Octopus
         InputAction _press;
         InputAction _position;
         InputAction _keyMove;
+        InputAction _keyVertical;
         InputAction _keyHold;
         InputAction _keyTap;
+        // Phím chiêu trên máy tính: J = nút 1 (đánh thường), K = nút 2 (chiêu), L = nút 3 (chiêu đặc biệt)
+        static readonly string[] SkillKeys = { "j", "k", "l" };
         readonly InputAction[] _keySkills = new InputAction[3];
         InputAction _keyRage;
 
@@ -32,6 +39,8 @@ namespace Octopus
         bool _dragging;
         bool _consumed;
         bool _blocked; // lần chạm hiện tại bắt đầu trên nút: không tính là cử chỉ điều khiển
+        Vector2 _screenStick;
+        bool _jumpButton, _jumpButtonPressed;
 
         /// <summary>Vừa đặt ngón tay / click xuống trong frame này.</summary>
         public bool PressedThisFrame { get; private set; }
@@ -48,7 +57,33 @@ namespace Octopus
         /// <summary>-1, 0, 1: đang vuốt sang trái / không vuốt / sang phải, so với chỗ đặt tay.</summary>
         public float Drag { get; private set; }
 
-        /// <summary>Phím chiêu 1 / 2 / 3 (slot 0..2) vừa bấm xuống trong frame này. Trên điện thoại dùng nút trên màn hình.</summary>
+        /// <summary>Nhân vật người: cần điều hướng -1..1 (x = chạy, y = kéo lên / xuống), từ cần trên màn hình hoặc bàn phím.</summary>
+        public Vector2 Stick { get; private set; }
+
+        /// <summary>Nhân vật người: chạy -1..1 (0 khi đang kéo cần lên / xuống).</summary>
+        public float Run => HeroMotor.RunOf(Stick);
+
+        /// <summary>Nhân vật người: kéo cần lên (1) / xuống (-1) / không (0) — kiểu chiêu khi bấm nút chiêu.</summary>
+        public int Aim => HeroMotor.AimOf(Stick);
+
+        /// <summary>Nhân vật người: đang giữ nút nhảy (nút NHẢY trên màn hình hoặc Space).</summary>
+        public bool JumpHeld { get; private set; }
+
+        /// <summary>Nhân vật người: vừa bấm nút nhảy trong frame này.</summary>
+        public bool JumpPressedThisFrame { get; private set; }
+
+        /// <summary>Cần điều hướng trên màn hình (VirtualJoystick) gửi giá trị -1..1 vào đây mỗi khi kéo / thả.</summary>
+        public void SetStick(Vector2 value) => _screenStick = Vector2.ClampMagnitude(value, 1f);
+
+        /// <summary>Nút NHẢY trên màn hình gửi vào đây lúc bấm (true) / nhả (false).</summary>
+        public void SetJumpButton(bool held)
+        {
+            if (held && !_jumpButton)
+                _jumpButtonPressed = true;
+            _jumpButton = held;
+        }
+
+        /// <summary>Phím chiêu J / K / L (nút 1 / 2 / 3, slot 0..2) vừa bấm xuống trong frame này. Trên điện thoại dùng nút trên màn hình.</summary>
         public bool SkillKeyDown(int slot) => _keySkills[slot] != null && _keySkills[slot].WasPressedThisFrame();
 
         /// <summary>Phím chiêu vừa nhả ra trong frame này.</summary>
@@ -92,13 +127,17 @@ namespace Octopus
             _keyMove.AddCompositeBinding("1DAxis").With("Negative", "<Keyboard>/a").With("Positive", "<Keyboard>/d");
             _keyMove.AddCompositeBinding("1DAxis").With("Negative", "<Keyboard>/leftArrow").With("Positive", "<Keyboard>/rightArrow");
 
+            _keyVertical = new InputAction("KeyVertical", InputActionType.Value);
+            _keyVertical.AddCompositeBinding("1DAxis").With("Negative", "<Keyboard>/s").With("Positive", "<Keyboard>/w");
+            _keyVertical.AddCompositeBinding("1DAxis").With("Negative", "<Keyboard>/downArrow").With("Positive", "<Keyboard>/upArrow");
+
             _keyHold = new InputAction("KeyHold", InputActionType.Button);
             _keyHold.AddBinding("<Keyboard>/w");
             _keyHold.AddBinding("<Keyboard>/upArrow");
 
             _keyTap = new InputAction("KeyTap", InputActionType.Button, "<Keyboard>/space");
             for (int i = 0; i < _keySkills.Length; i++)
-                _keySkills[i] = new InputAction($"KeySkill{i + 1}", InputActionType.Button, $"<Keyboard>/{i + 1}");
+                _keySkills[i] = new InputAction($"KeySkill{i + 1}", InputActionType.Button, $"<Keyboard>/{SkillKeys[i]}");
             _keyRage = new InputAction("KeyRage", InputActionType.Button, "<Keyboard>/r");
         }
 
@@ -107,6 +146,7 @@ namespace Octopus
             _press.Enable();
             _position.Enable();
             _keyMove.Enable();
+            _keyVertical.Enable();
             _keyHold.Enable();
             _keyTap.Enable();
             foreach (InputAction key in _keySkills)
@@ -119,6 +159,7 @@ namespace Octopus
             _press.Disable();
             _position.Disable();
             _keyMove.Disable();
+            _keyVertical.Disable();
             _keyHold.Disable();
             _keyTap.Disable();
             foreach (InputAction key in _keySkills)
@@ -127,6 +168,9 @@ namespace Octopus
 
             PressedThisFrame = TappedThisFrame = IsHolding = false;
             Drag = 0f;
+            Stick = Vector2.zero;
+            JumpHeld = JumpPressedThisFrame = false;
+            _jumpButtonPressed = false;
         }
 
         void OnDestroy()
@@ -134,6 +178,7 @@ namespace Octopus
             _press.Dispose();
             _position.Dispose();
             _keyMove.Dispose();
+            _keyVertical.Dispose();
             _keyHold.Dispose();
             _keyTap.Dispose();
             foreach (InputAction key in _keySkills)
@@ -186,6 +231,19 @@ namespace Octopus
 
             Drag = drag;
             IsHolding = holding;
+
+            // Nhân vật người: phím thắng cần trên màn hình theo từng trục
+            float keyVertical = _keyVertical.ReadValue<float>();
+            Vector2 stick = _screenStick;
+            if (keyMove != 0f)
+                stick.x = Mathf.Sign(keyMove);
+            if (keyVertical != 0f)
+                stick.y = Mathf.Sign(keyVertical);
+            Stick = Vector2.ClampMagnitude(stick, 1.5f);
+            bool jumpKey = _keyTap.IsPressed();
+            JumpPressedThisFrame = _keyTap.WasPressedThisFrame() || _jumpButtonPressed;
+            _jumpButtonPressed = false;
+            JumpHeld = jumpKey || _jumpButton;
         }
     }
 }

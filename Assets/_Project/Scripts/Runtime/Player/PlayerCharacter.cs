@@ -7,6 +7,26 @@ namespace Octopus
     {
         Octopus,
         Spider,
+        Red,   // nhân vật người RED (Docs/nhan_vat_moi/red)
+        Pink,  // nhân vật người PINK (Docs/nhan_vat_moi/pink)
+        Blue,  // nhân vật người BLUE (Docs/nhan_vat_moi/blue)
+    }
+
+    public static class PlayableCharacterExtensions
+    {
+        /// <summary>Nhân vật người (RED, PINK, BLUE): điều khiển kiểu đối kháng đi cảnh (HeroMotor), không đu dây.</summary>
+        public static bool IsHero(this PlayableCharacter character) =>
+            character is PlayableCharacter.Red or PlayableCharacter.Pink or PlayableCharacter.Blue;
+
+        /// <summary>Tên hiện trên màn hình.</summary>
+        public static string DisplayName(this PlayableCharacter character) => character switch
+        {
+            PlayableCharacter.Spider => "Nhện",
+            PlayableCharacter.Red => "RED",
+            PlayableCharacter.Pink => "PINK",
+            PlayableCharacter.Blue => "BLUE",
+            _ => "Bạch tuộc",
+        };
     }
 
     /// <summary>Nhân vật người chơi chọn ở màn chọn nhân vật, mang sang màn chơi.</summary>
@@ -41,8 +61,9 @@ namespace Octopus
     }
 
     /// <summary>
-    /// Bật hình của nhân vật được chọn (bạch tuộc hoặc nhện) trên người chơi. Cùng một thân vật lý và cách điều khiển:
-    /// bò, nhảy, bắn xúc tu / tơ để đu, bám ngược dưới đá, chiêu laze.
+    /// Bật hình của nhân vật được chọn trên người chơi. Bạch tuộc và nhện cùng một thân vật lý và cách điều khiển: bò, nhảy,
+    /// bắn xúc tu / tơ để đu, bám ngược dưới đá, chiêu laze. Ba nhân vật người (RED, PINK, BLUE) bật thêm HeroMotor:
+    /// thân hình người, chạy / nhảy / nhảy đúp bằng cần điều hướng + nút nhảy, đá là bục một chiều.
     /// Bấm Play ngay trong scene màn chơi thì mở màn chọn nhân vật trước (như khi mở app); tắt ô Choose On Play để vào
     /// thẳng bằng nhân vật ở ô Start With.
     /// </summary>
@@ -56,8 +77,36 @@ namespace Octopus
         [SerializeField] PlayableCharacter startWith = PlayableCharacter.Octopus;
         [SerializeField] GameObject octopusVisual;
         [SerializeField] GameObject spiderVisual;
+        [Tooltip("Hình RED (chứa \"Hero Visual\" do HeroRigBuilder dựng)")]
+        [SerializeField] GameObject redVisual;
+        [Tooltip("Hình PINK")]
+        [SerializeField] GameObject pinkVisual;
+        [Tooltip("Hình BLUE")]
+        [SerializeField] GameObject blueVisual;
+        [Tooltip("Bộ di chuyển của nhân vật người (bật khi chọn RED / PINK / BLUE)")]
+        [SerializeField] HeroMotor heroMotor;
 
         public PlayableCharacter Current { get; private set; }
+
+        /// <summary>Object hình của một nhân vật (null nếu chưa dựng).</summary>
+        public GameObject VisualOf(PlayableCharacter character) => character switch
+        {
+            PlayableCharacter.Spider => spiderVisual,
+            PlayableCharacter.Red => redVisual,
+            PlayableCharacter.Pink => pinkVisual,
+            PlayableCharacter.Blue => blueVisual,
+            _ => octopusVisual,
+        };
+
+        /// <summary>Hình nhân vật người đang chơi (null với bạch tuộc / nhện).</summary>
+        public IHeroVisual HeroVisual
+        {
+            get
+            {
+                GameObject visual = Current.IsHero() ? VisualOf(Current) : null;
+                return visual != null ? visual.GetComponentInChildren<IHeroVisual>(true) : null;
+            }
+        }
 
         void Awake()
         {
@@ -86,6 +135,16 @@ namespace Octopus
             Current = character;
             SetActive(octopusVisual, character == PlayableCharacter.Octopus);
             SetActive(spiderVisual, character == PlayableCharacter.Spider);
+            SetActive(redVisual, character == PlayableCharacter.Red);
+            SetActive(pinkVisual, character == PlayableCharacter.Pink);
+            SetActive(blueVisual, character == PlayableCharacter.Blue);
+
+            if (!Application.isPlaying || heroMotor == null)
+                return;
+            if (character.IsHero())
+                heroMotor.Activate(character, HeroVisual);
+            else
+                heroMotor.Deactivate();
         }
 
         static void SetActive(GameObject visual, bool active)
