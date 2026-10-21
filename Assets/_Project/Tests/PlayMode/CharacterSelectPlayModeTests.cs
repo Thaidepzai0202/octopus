@@ -66,7 +66,7 @@ namespace Octopus.Tests
             yield return SceneManager.LoadSceneAsync("CharacterSelect");
             yield return null;
             UnityEngine.UI.Button[] buttons = Object.FindObjectsByType<UnityEngine.UI.Button>(FindObjectsSortMode.None);
-            Assert.That(buttons.Length, Is.EqualTo(3), "2 thẻ nhân vật + nút Bắt đầu");
+            Assert.That(buttons.Length, Is.EqualTo(7), "5 thẻ nhân vật + nút Bắt đầu + nút Đánh boss");
             foreach (UnityEngine.UI.Button button in buttons)
                 AssertClickable(button.transform, button.name);
         }

@@ -31,6 +31,7 @@ namespace Octopus
             [Tooltip("Tia to gấp mấy lần bình thường")] public float width;
             [Tooltip("Góc tia lúc bắt đầu bắn (độ, 0 = thẳng trước mặt, dương = chếch lên)")] public float sweepFrom;
             [Tooltip("Góc tia lúc tắt (độ); khác Sweep From thì tia quét dần")] public float sweepTo;
+            [Tooltip("Tia dài gấp mấy lần ô Range (0 = 1): tầm chiêu của nhân vật")] public float rangeScale;
         }
 
         [Tooltip("Vận sức bao lâu trước khi bắn (giây)")]
@@ -47,7 +48,7 @@ namespace Octopus
         OctopusController _controller;
         ILaserEye _eye;
         float _elapsed;
-        float _charge, _fire, _cooldown, _sweepFrom, _sweepTo;
+        float _charge, _fire, _cooldown, _sweepFrom, _sweepTo, _rangeScale = 1f;
         float _facing = 1f;
 
         public LaserPhase Phase { get; private set; }
@@ -129,10 +130,20 @@ namespace Octopus
             _sweepFrom = shot.sweepFrom;
             _sweepTo = shot.sweepTo;
             WidthScale = shot.width > 0f ? shot.width : 1f;
+            _rangeScale = shot.rangeScale > 0f ? shot.rangeScale : 1f;
             _facing = _controller != null && _controller.Facing < 0f ? -1f : 1f;
             Direction = Aim(_sweepFrom);
             SetPhase(_charge > 0f ? LaserPhase.Charging : LaserPhase.Firing);
             return true;
+        }
+
+        /// <summary>Huỷ lần bắn đang dở (vận sức / đang bắn / hồi chiêu): tắt tia, về Ready. Người chơi gục thì gọi.</summary>
+        public void Cancel()
+        {
+            if (Phase == LaserPhase.Ready)
+                return;
+            _elapsed = 0f;
+            SetPhase(LaserPhase.Ready);
         }
 
         // Hướng tia chếch lên angle độ so với phía trước
@@ -175,9 +186,10 @@ namespace Octopus
         public void UpdateBeam()
         {
             Vector2 origin = Origin;
-            RaycastHit2D hit = Physics2D.Raycast(origin, Direction, range, blockMask);
+            float length = range * _rangeScale;
+            RaycastHit2D hit = Physics2D.Raycast(origin, Direction, length, blockMask);
             BeamHit = hit.collider != null;
-            BeamEnd = BeamHit ? hit.point : origin + Direction * range;
+            BeamEnd = BeamHit ? hit.point : origin + Direction * length;
             HitNormal = BeamHit ? hit.normal : -Direction;
         }
 

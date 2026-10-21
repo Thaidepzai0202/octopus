@@ -20,10 +20,10 @@ namespace Octopus.EditorTools
         const string MaterialPath = Root + "/Art/Materials";
         const string BundleId = "com.yourcompany.octopus";
 
-        const string PlayerLayer = "Player";
-        const string AnchorableLayer = "Anchorable";
-        const string HazardLayer = "Hazard";
-        const string EnemyLayer = "Enemy";
+        internal const string PlayerLayer = "Player";
+        internal const string AnchorableLayer = "Anchorable";
+        internal const string HazardLayer = "Hazard";
+        internal const string EnemyLayer = "Enemy";
 
         [MenuItem("Octopus/Dựng lại màn chơi (ghi đè scene)", priority = 1)]
         public static void Run()
@@ -132,6 +132,7 @@ namespace Octopus.EditorTools
             LaserSkillBuilder.Build(player, glow, LayerMask.GetMask("Default", AnchorableLayer));
             CombatBuilder.Build(player, glow, LayerMask.NameToLayer(EnemyLayer)); // bộ chiêu, nộ, bia tập, HUD
             SpiderBuilder.Build(player.GetComponent<OctopusController>(), glow); // hình nhện, bật khi chọn nhện
+            HeroBuilder.Build(player); // 3 nhân vật người: thân, HeroMotor, hình (bật khi chọn)
             CharacterSelectBuilder.AddBackButton(GameObject.Find("HUD/Safe Area").GetComponent<RectTransform>(),
                 player.GetComponent<PlayerInputReader>());
             CreateFollowCamera(player);
@@ -145,17 +146,19 @@ namespace Octopus.EditorTools
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             EditorSceneManager.SaveScene(scene, ScenePath);
 
-            // Màn chọn nhân vật mở đầu tiên, rồi mới vào màn chơi
+            // Màn chọn nhân vật mở đầu tiên, rồi mới vào màn chơi; màn đánh boss vào từ nút Đánh boss
             CharacterSelectBuilder.BuildScene(glow);
+            BossArenaBuilder.BuildScene(glow, glowLine, plainLine);
             EditorSceneManager.OpenScene(ScenePath);
             EditorBuildSettings.scenes = new[]
             {
                 new EditorBuildSettingsScene(CharacterSelectBuilder.ScenePath, true),
                 new EditorBuildSettingsScene(ScenePath, true),
+                new EditorBuildSettingsScene(BossArenaBuilder.ScenePath, true),
             };
         }
 
-        static Camera CreateCamera()
+        internal static Camera CreateCamera()
         {
             var go = new GameObject("Main Camera") { tag = "MainCamera" };
             go.transform.position = new Vector3(0f, 0f, -10f);
@@ -171,7 +174,7 @@ namespace Octopus.EditorTools
             return camera;
         }
 
-        static void CreateGlobalLight()
+        internal static void CreateGlobalLight()
         {
             var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
             light.lightType = Light2D.LightType.Global;
@@ -195,7 +198,7 @@ namespace Octopus.EditorTools
             go.AddComponent<SpeedZoom>();
         }
 
-        static PhysicsMaterial2D CreateBodyMaterial()
+        internal static PhysicsMaterial2D CreateBodyMaterial()
         {
             string path = $"{MaterialPath}/OctopusBody.physicsMaterial2D";
             var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>(path);

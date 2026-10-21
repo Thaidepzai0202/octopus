@@ -4,9 +4,11 @@ namespace Octopus
 {
     /// <summary>
     /// Bia tập (tượng đá có lõi pha lê) để thử chiêu: có máu, trúng đòn thì loé sáng, bẹp xuống rồi nảy giãn (đòn càng nặng
-    /// càng bẹp), lắc nghiêng như bao cát, bị đẩy văng / kéo lại rồi lò xo về chỗ cũ, đòn nặng làm văng mảnh đá. Hiện trạng
+    /// càng bẹp), lắc nghiêng như bao cát, bị đẩy văng / kéo lại rồi lò xo về chỗ cũ (bị kéo thì dừng ngay trước mặt người
+    /// kéo, không chồng lên người), đòn nặng làm văng mảnh đá. Hiện trạng
     /// thái tơ trói, kén tơ, mực, trúng độc (mất máu dần), choáng (vòng sao vàng quay quanh đầu). Hết máu thì vỡ tung, vài
     /// giây sau dựng lại; không bị đánh một lúc thì hồi đầy máu. Không cản đường (collider dạng trigger).
+    /// Bị đóng băng (Health.Freeze): đứng hình, ám màu băng; đòn trúng trong lúc đó dồn lại, hết đóng băng mới văng / lắc.
     /// </summary>
     [RequireComponent(typeof(Health))]
     public class TrainingDummy : MonoBehaviour
@@ -28,6 +30,8 @@ namespace Octopus
         [SerializeField] float regenDelay = 4f;
         [SerializeField] Color poisonColor = new Color(0.55f, 1f, 0.35f);
         [SerializeField] Color inkColor = new Color(0.28f, 0.18f, 0.42f);
+        [Tooltip("Màu ám lên bia khi bị đóng băng (ngưng đọng thời gian)")]
+        [SerializeField] Color frozenColor = new Color(0.62f, 0.72f, 1f);
 
         [Header("Bẹp / giãn khi trúng đòn")]
         [Tooltip("Đòn thường làm bia bẹp xuống bấy nhiêu (0.1 = thấp đi 10%, bè ra tương ứng); đòn nhỏ (laze, độc) bẹp ít hơn")]
@@ -59,6 +63,13 @@ namespace Octopus
         [Tooltip("Tắt dần khi về chỗ cũ")]
         [SerializeField] float returnDamping = 6f;
 
+        [Header("Bị kéo lại gần (móc kéo, xoáy nước hút, lưới giật)")]
+        [Tooltip("Bị kéo về phía người đánh thì dừng lại khi tâm bia còn cách tâm người đánh bấy nhiêu unit: đứng ngay trước mặt, " +
+            "chừa khe nhỏ, không chồng lên người (đang đứng gần hơn thì không kéo thêm)")]
+        [SerializeField, Min(0f)] float pullStandoff = 1.4f;
+        [Tooltip("Bị kéo tới trước mặt người đánh thì đứng đó bấy nhiêu giây rồi mới lò xo về chỗ cũ")]
+        [SerializeField, Min(0f)] float pullHold = 0.35f;
+
         [Header("Mảnh vỡ")]
         [Tooltip("Số mảnh đá văng ra khi trúng đòn nặng (đòn thường ra một phần ba)")]
         [SerializeField, Min(0)] int debris = 9;
@@ -83,6 +94,10 @@ namespace Octopus
 
         // Phần trăm bán kính elip so với nửa khung ảnh vòng sao (GameFeelBuilder vẽ vòng chiếm 90% khung)
         const float RingFill = 0.9f;
+        // Lệch khỏi chỗ đứng tối đa (unit): đủ cho móc kéo giật bia từ cuối tầm về tận trước mặt
+        const float MaxOffset = 5.5f;
+        // Vạch dừng khi bị kéo còn hiệu lực bấy nhiêu giây sau cú kéo (đủ cho bia bay tới, đứng lại rồi về chỗ)
+        const float PullMemory = 1.2f;
 
         Health _health;
         Collider2D _collider;
@@ -92,6 +107,7 @@ namespace Octopus
         float _poisonDps, _poisonTime, _poisonTick;
         float _sinceHit = 99f, _dead;
         float _squash, _squashVelocity, _tilt, _tiltVelocity, _dizzy;
+        float _pullStop, _pullSide, _pullTime, _pullHeld; // bị kéo: vạch dừng (lệch x), phía bia so với người kéo, thời gian
         Vector3 _artScale = Vector3.one, _starsLocal, _starsBaseScale = Vector3.one, _ringScale = Vector3.one;
         bool _flashChild;
         Transform[] _orbit = new Transform[0];
@@ -176,6 +192,18 @@ namespace Octopus
                 _flash = Mathf.Max(_flash, effect.heavy ? 1f : Mathf.Lerp(0.3f, 1f, amount / 15f)); // đòn nhỏ liên tục (laze, độc) chỉ loé nhẹ
             _shake = Mathf.Max(_shake, effect.heavy ? 1f : 0.5f);
             _velocity += effect.knockback * knockbackScale;
+            if (IsPull(from, effect))
+            {
+                // Vạch dừng ngay trước mặt người kéo (tính từ tâm người đánh, phía bia đang đứng)
+                float side = Mathf.Sign(transform.position.x - from.x + 1e-3f);
+                float gap = Mathf.Min(pullStandoff, Mathf.Abs(_home.x + _offset.x - from.x));
+                _pullStop = from.x + side * gap - _home.x;
+                _pullSide = side;
+                _pullTime = PullMemory;
+            }
+            else if (Mathf.Abs(effect.knockback.x) > 0.05f)
+                _pullTime = _pullHeld = 0f; // bị đẩy văng ra: thôi giữ vạch dừng của cú kéo trước
+
             _snare = Mathf.Max(_snare, effect.snare);
             if (effect.ink)
                 _ink = Mathf.Max(_ink, effect.snare);
@@ -206,8 +234,10 @@ namespace Octopus
                 _squashVelocity = 0f;
             }
 
-            // Lắc nghiêng quanh chân đế, ngả ra xa người đánh (đòn kéo lại thì ngả về phía người đánh)
-            float side = Mathf.Abs(effect.knockback.x) > 0.05f ? Mathf.Sign(effect.knockback.x) : Mathf.Sign(transform.position.x - from.x + 1e-3f);
+            // Lắc nghiêng quanh chân đế, ngả ra xa người đánh. Bị kéo lại gần thì đỉnh bia trễ lại phía sau nên cũng ngả ra xa
+            // (không đổ lên người kéo)
+            float away = Mathf.Sign(transform.position.x - from.x + 1e-3f);
+            float side = IsPull(from, effect) || Mathf.Abs(effect.knockback.x) <= 0.05f ? away : Mathf.Sign(effect.knockback.x);
             float kick = (effect.heavy ? tiltHeavy : tiltLight * weight) * Mathf.Lerp(0.8f, 1.3f, Mathf.Clamp01(Mathf.Abs(effect.knockback.x) / 6f));
             _tiltVelocity -= side * kick;
 
@@ -226,6 +256,9 @@ namespace Octopus
             if (effect.heavy)
                 CombatFx.Instance.Burst((Vector2)transform.position + Vector2.up * 0.1f, dustColor, 7, 2.2f, 0.32f, 0.5f, -1.5f, Vector2.up * 0.4f);
         }
+
+        /// <summary>Đòn kéo mục tiêu về phía người đánh (knockback ngược phía mục tiêu đứng so với người đánh).</summary>
+        bool IsPull(Vector2 from, HitEffect effect) => effect.knockback.x * Mathf.Sign(transform.position.x - from.x + 1e-3f) < -0.05f;
 
         void OnDied()
         {
@@ -263,6 +296,7 @@ namespace Octopus
                 {
                     _health.Restore();
                     _offset = _velocity = Vector2.zero;
+                    _pullTime = _pullHeld = 0f;
                     _squash = _squashVelocity = _tilt = _tiltVelocity = 0f;
                     _sinceHit = 99f;
                     SetVisible(true);
@@ -271,6 +305,17 @@ namespace Octopus
                 }
 
                 UpdateOverlays(dt);
+                return;
+            }
+
+            // Đóng băng: đứng hình tại chỗ (dáng, lắc, bị đẩy, độc, hồi máu đều dừng), chỉ còn loé khi trúng đòn
+            if (_health.IsFrozen)
+            {
+                _flash = Mathf.MoveTowards(_flash, 0f, dt * 7f);
+                flash.color = new Color(1f, 1f, 1f, 0.7f * _flash);
+                art.color = Color.Lerp(Color.white, frozenColor, 0.75f);
+                if (barFill != null)
+                    barFill.localScale = new Vector3(Mathf.Clamp01(_health.Current / _health.Max), 1f, 1f);
                 return;
             }
 
@@ -302,14 +347,34 @@ namespace Octopus
             if (_snare > 0f || _cocoon > 0f)
                 _velocity *= 1f - Mathf.Min(1f, 12f * dt);
             _velocity += (-_offset * returnStiffness - _velocity * returnDamping) * dt;
+            if (_pullHeld > 0f)
+            {
+                _pullHeld -= dt;
+                _velocity.x = 0f; // vừa bị kéo tới trước mặt người kéo: đứng lại một chút
+            }
+
             _offset += _velocity * dt;
-            _offset = Vector2.ClampMagnitude(_offset, 4f);
+            if (_pullTime > 0f)
+            {
+                _pullTime -= dt;
+                if ((_offset.x - _pullStop) * _pullSide < 0f)
+                {
+                    // Chạm vạch dừng: khựng lại ngay trước mặt; đà lao chuyển thành cú lắc của đỉnh bia (trễ lại phía sau)
+                    _tilt = Mathf.Clamp(_tilt + Lean(), -maxTilt, maxTilt);
+                    _offset.x = _pullStop;
+                    _velocity.x = 0f;
+                    _pullHeld = pullHold;
+                    _pullTime = PullMemory;
+                }
+            }
+
+            _offset = Vector2.ClampMagnitude(_offset, MaxOffset);
             _offset.y = Mathf.Max(_offset.y, 0f);
 
             // Bẹp-giãn và lắc nghiêng: lò xo nảy tắt dần (chia bước nhỏ cho ổn định khi khung hình dài)
             int steps = Mathf.CeilToInt(dt * 240f);
             float h = steps > 0 ? dt / steps : 0f;
-            bool held = _snare > 0f || _cocoon > 0f;
+            bool held = _snare > 0f || _cocoon > 0f || _pullHeld > 0f;
             for (int i = 0; i < steps; i++)
             {
                 _squashVelocity += (-_squash * squashStiffness - _squashVelocity * squashDamping) * h;
@@ -324,7 +389,7 @@ namespace Octopus
             _shake = Mathf.MoveTowards(_shake, 0f, dt * 4f);
             Vector2 jitter = Random.insideUnitCircle * (0.08f * _shake); // rung cả trong lúc khựng hình
             transform.position = _home + (Vector3)(_offset + jitter);
-            float tilt = Mathf.Clamp(_tilt + _velocity.x * -1.5f, -maxTilt, maxTilt) + _shake * 4f * Mathf.Sin(Time.time * 50f);
+            float tilt = Mathf.Clamp(_tilt + Lean(), -maxTilt, maxTilt) + _shake * 4f * Mathf.Sin(Time.time * 50f);
             art.transform.localRotation = Quaternion.Euler(0f, 0f, tilt);
             art.transform.localScale = Vector3.Scale(_artScale, new Vector3(1f + _squash * 0.85f, 1f - _squash, 1f));
 
@@ -406,6 +471,10 @@ namespace Octopus
                 }
             }
         }
+
+        // Nghiêng theo vận tốc (độ): bị đẩy thì đỉnh bia ngả theo hướng bay; đang bị kéo về phía người kéo thì đỉnh trễ lại
+        // phía sau (ngả ra xa người kéo). Hai cách bằng nhau (0) khi vận tốc 0 nên đổi qua lại không giật
+        float Lean() => _pullTime > 0f && _velocity.x * _pullSide < 0f ? _velocity.x * 0.8f : _velocity.x * -1.5f;
 
         static float BackOut(float x)
         {

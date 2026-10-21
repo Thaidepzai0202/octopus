@@ -40,8 +40,8 @@
 - Mỗi lúc chỉ ra một chiêu. Ra chiêu vẫn bò, nhảy, đu được (trừ chiêu tự lao người đi như Vồ mồi, Phi tơ, Phun mực).
 - Chạm vào cụm nút không làm nhân vật nhảy hay bắn xúc tu.
 
-**Thử trong Editor bằng bàn phím:** `1` / `2` / `3` = chạm nút. **Giữ một số rồi bấm số khác** = vuốt, ví dụ giữ `2` bấm `1`
-= Phun mực, giữ `3` bấm `2` = Đại pháo laze. `R` = thêm 100 nộ để thử chiêu cuối (chỉ có trong Editor và bản build Development).
+**Thử trong Editor bằng bàn phím:** `J` / `K` / `L` = chạm nút 1 / 2 / 3. **Giữ một phím rồi bấm phím kia** = vuốt, ví dụ giữ `K`
+bấm `J` = Phun mực, giữ `L` bấm `K` = Đại pháo laze. `R` = thêm 100 nộ để thử chiêu cuối (chỉ có trong Editor và bản build Development).
 Di chuyển vẫn như cũ: A/D, W, Space. Phím E cũ (laze) đã bỏ; laze giờ là nút 2.
 
 ---
@@ -132,6 +132,7 @@ Chọn người chơi `Octopus` trong Hierarchy (cùng một object cho cả b�
 | Muốn chỉnh | Ở đâu | Ô |
 |---|---|---|
 | Sát thương, hồi chiêu, tầm, thời gian từng chiêu | `Octopus` › **Combat Controller** › **Octopus Skills** / **Spider Skills** › mở chiêu theo **#** ở bảng trên (mỗi dòng hiện tên chiêu) | **Cooldown**, **Damage**…, laze thì mở **Shot** (**Charge**, **Fire**, **Width**, **Sweep From / To**) |
+| Cỡ / tầm mọi chiêu của một nhân vật (đang ×2) | `Octopus` › **Combat Controller** › **Cỡ / tầm chiêu** | **Size**, **Range** của từng nhân vật (1 = như ban đầu) |
 | Đổi tên / mô tả chiêu (hiện khi vuốt) | cùng chỗ | **Name**, **Description** |
 | Nộ tăng nhanh / chậm | `Octopus` › **Rage Meter** | **Per Unit Moved** (2.5), **Per Damage** (0.35) |
 | Chiêu cuối mạnh bao nhiêu ở mỗi mốc | `Octopus` › Rage Meter | **Tier Multiplier** (1, 1.7, 2.6) |

@@ -79,11 +79,18 @@ namespace Octopus
         [Header("Khác")]
         [Tooltip("Xúc tu khổng lồ trồi lên (chiêu cuối bạch tuộc)")]
         [SerializeField] Sprite tentacle;
-        [Tooltip("Nhện con (chiêu cuối nhện)")]
+        [Tooltip("Nhện con (chiêu cuối nhện): nhìn ngang, mặt hướng phải, chân chạm đáy ảnh")]
         [SerializeField] Sprite spiderling;
+        [Tooltip("Nhện con, dáng bước chân kia: bò thì đổi qua lại với ảnh trên. Trống thì chỉ dùng một ảnh")]
+        [SerializeField] Sprite spiderlingStep;
+        [Tooltip("Chỗ cụm mắt trên ảnh nhện con (quầng mắt hồng), tính từ tâm ảnh theo bề ngang ảnh; x dương = phía mặt nhìn")]
+        [SerializeField] Vector2 spiderlingEyes = new Vector2(0.2f, 0f);
 
         [Header("Thứ tự vẽ, giới hạn")]
         [SerializeField] int sortingOrder = 14;
+        [Tooltip("Hiệu ứng vẽ sau lưng nhân vật (xoáy nước, lửa tím lúc rống, khói độc, quầng sáng sau lưng): sau mọi phần của " +
+            "bạch tuộc / nhện (từ -6 trở lên) và bia tập (2), trước nền đá (≈ -90). Dùng từ backOrder - 5 tới backOrder + 2")]
+        [SerializeField] int backOrder = -12;
         [Tooltip("Vết nứt nằm trên mặt đất: sau nhân vật, trước nền đá")]
         [SerializeField] int groundOrder = -40;
         [Tooltip("Số hạt tối đa cùng lúc (hết chỗ thì hạt mới bị bỏ)")]
@@ -94,6 +101,8 @@ namespace Octopus
         const int ThreadPoints = 10;
         static readonly Color Dust = new Color(0.5f, 0.42f, 0.62f, 0.5f);
         static readonly Color Violet = new Color(0.45f, 0.25f, 1f);
+        static readonly Color Pink = new Color(1f, 0.45f, 0.9f);
+        static readonly Color TrailDust = new Color(0.74f, 0.66f, 0.86f, 0.55f);
         static int[] s_ribbonTriangles;
         static Vector2[] s_ribbonUv;
 
@@ -414,21 +423,22 @@ namespace Octopus
             b.Squash = 0.3f;
         }
 
-        /// <summary>Chớp sáng (quầng + sao nhiều tia xoay) ở at.</summary>
-        public void Flash(Vector2 at, float size, Color color, float life = 0.25f)
+        /// <summary>Chớp sáng (quầng + sao nhiều tia xoay) ở at. behind: vẽ sau lưng nhân vật (ánh sáng hắt từ phía sau, không che người).</summary>
+        public void Flash(Vector2 at, float size, Color color, float life = 0.25f, bool behind = false)
         {
             Sprite body = impact != null ? impact : glow;
-            ref Particle g = ref Emit(body, false, sortingOrder + 1, at, Vector2.zero, size * 0.7f, life, WithAlpha(color, color.a * 0.75f));
+            int order = behind ? backOrder : sortingOrder;
+            ref Particle g = ref Emit(body, false, order + 1, at, Vector2.zero, size * 0.7f, life, WithAlpha(color, color.a * 0.75f));
             g.EndSize = size * 1.4f;
             g.FadeIn = 0.08f;
             g.Angle = Random.Range(-20f, 20f);
-            ref Particle s = ref Emit(body, true, sortingOrder + 2, at, Vector2.zero, size * 0.9f, life * 0.8f, new Color(1f, 1f, 1f, 0.8f));
+            ref Particle s = ref Emit(body, true, order + 2, at, Vector2.zero, size * 0.9f, life * 0.8f, new Color(1f, 1f, 1f, 0.8f));
             s.EndSize = size * 0.5f;
             s.EndColor = WithAlpha(color, 0.6f);
             s.Angle = Random.Range(0f, 360f);
             s.Spin = 90f;
             s.Hold = 0.2f;
-            ref Particle f = ref Emit(flare, true, sortingOrder + 2, at, Vector2.zero, size * 0.4f, life * 0.6f, Color.white);
+            ref Particle f = ref Emit(flare, true, order + 2, at, Vector2.zero, size * 0.4f, life * 0.6f, Color.white);
             f.EndSize = size * 0.9f;
             f.Angle = 45f;
         }
@@ -537,9 +547,10 @@ namespace Octopus
             });
         }
 
-        /// <summary>Lửa cháy liếm lên ở ground (rộng width) trong life giây.</summary>
-        public void Flames(Vector2 ground, float width, Color color, float life)
+        /// <summary>Lửa cháy liếm lên ở ground (rộng width) trong life giây. behind: cháy sau lưng nhân vật (hào quang, không che người).</summary>
+        public void Flames(Vector2 ground, float width, Color color, float life, bool behind = false)
         {
+            int order = behind ? backOrder : sortingOrder - 2;
             float debt = 0f;
             float last = 0f;
             Add(age =>
@@ -554,7 +565,7 @@ namespace Octopus
                 {
                     debt -= 1f;
                     bool hot = Random.value < 0.3f; // lõi sáng cộng màu, còn lại lửa tím đậm
-                    ref Particle p = ref Emit(flame, hot, sortingOrder - 2, ground + new Vector2(Random.Range(-0.5f, 0.5f) * width, -0.1f),
+                    ref Particle p = ref Emit(flame, hot, order, ground + new Vector2(Random.Range(-0.5f, 0.5f) * width, -0.1f),
                         new Vector2(Random.Range(-0.2f, 0.2f), Random.Range(0.5f, 1.3f)), width * Random.Range(hot ? 0.25f : 0.35f, hot ? 0.45f : 0.7f),
                         Random.Range(0.35f, 0.55f), hot ? HotOf(color) : color);
                     p.EndSize = p.Size * 0.4f;
@@ -571,9 +582,13 @@ namespace Octopus
         // Mây mực, nước, độc
         // =============================================================================================================
 
-        /// <summary>Đám mây (mực) cuộn ra quanh at trong life giây: cụm mây lõi tối mép sáng, quầng sáng bên trong, bọt nổi lên.</summary>
-        public void Cloud(Vector2 at, float radius, Color color, float life, int puffs = 14)
+        /// <summary>
+        /// Đám mây (mực) cuộn ra quanh at trong life giây: cụm mây lõi tối mép sáng, quầng sáng bên trong, bọt nổi lên.
+        /// behind: cuộn sau lưng nhân vật (không che người).
+        /// </summary>
+        public void Cloud(Vector2 at, float radius, Color color, float life, int puffs = 14, bool behind = false)
         {
+            int order = behind ? backOrder : sortingOrder - 1;
             var parts = new SpriteRenderer[puffs];
             var offset = new Vector2[puffs];
             var size = new float[puffs];
@@ -582,7 +597,7 @@ namespace Octopus
             float unit = Unit(puff);
             for (int i = 0; i < puffs; i++)
             {
-                parts[i] = RentSprite(puff, sortingOrder - 1);
+                parts[i] = RentSprite(puff, order);
                 Vector2 o = Random.insideUnitCircle;
                 offset[i] = new Vector2(o.x * radius * 0.8f, o.y * radius * 0.5f + radius * 0.12f);
                 size[i] = radius * Random.Range(0.45f, 1.05f);
@@ -590,7 +605,7 @@ namespace Octopus
                 spin[i] = Random.Range(-25f, 25f);
             }
 
-            SpriteRenderer core = RentSprite(glow, sortingOrder - 2, true);
+            SpriteRenderer core = RentSprite(glow, order - 1, true);
             float glowUnit = Unit(glow);
             Color light = Color.Lerp(color, Color.white, 0.4f);
             float bubbles = 0f;
@@ -624,7 +639,7 @@ namespace Octopus
                 {
                     bubbles -= 1f;
                     Vector2 o = Random.insideUnitCircle;
-                    ref Particle b = ref Emit(bubble, true, sortingOrder, at + new Vector2(o.x * radius * 0.7f, o.y * radius * 0.4f),
+                    ref Particle b = ref Emit(bubble, true, order + 1, at + new Vector2(o.x * radius * 0.7f, o.y * radius * 0.4f),
                         new Vector2(Random.Range(-0.15f, 0.15f), Random.Range(0.4f, 0.9f)), Random.Range(0.1f, 0.26f), Random.Range(0.6f, 1f), light);
                     b.FadeIn = 0.25f;
                     b.Hold = 0.6f;
@@ -678,13 +693,18 @@ namespace Octopus
             Bubbles(at, size * 0.3f, color, 3);
         }
 
-        /// <summary>Xoáy nước quanh at trong life giây: các tầng xoáy quay dẹt thành phễu, vệt nước lượn quanh, nước bắn, gợn sóng dưới chân.</summary>
+        /// <summary>
+        /// Xoáy nước quanh at trong life giây: các tầng xoáy quay dẹt thành phễu, vệt nước lượn quanh, nước bắn, gợn sóng dưới
+        /// chân. Phần lớn xoáy vẽ sau lưng nhân vật để thấy rõ nhân vật xoay tít giữa xoáy; chỉ một lớp xoáy mờ ở chân, vài vệt
+        /// nước mảnh lượn thấp và giọt nước ở nửa vòng phía trước (ngoài thân người) là vẽ đè lên.
+        /// </summary>
         public void Vortex(Vector2 at, float radius, Color color, float life)
         {
             const int layers = 4;
-            var spin = new Spinner[layers];
+            var spin = new Spinner[layers + 1];
             for (int i = 0; i < layers; i++)
-                spin[i] = RentSpinner(swirl, sortingOrder - 1 + i);
+                spin[i] = RentSpinner(swirl, backOrder - 4 + i);
+            spin[layers] = RentSpinner(swirl, sortingOrder - 1); // bản mờ của tầng đáy, trước chân nhân vật
             float swirlUnit = Unit(swirl);
             Color core = Color.Lerp(color, Color.white, 0.75f);
             Color edge = Color.Lerp(color, Violet, 0.5f);
@@ -705,28 +725,34 @@ namespace Octopus
                 last = age;
                 float fade = Mathf.Clamp01(age * 5f) * Mathf.Clamp01((1f - k) * 5f);
                 float grow = 1f - (1f - Mathf.Clamp01(age / 0.3f)) * (1f - Mathf.Clamp01(age / 0.3f));
-                for (int i = 0; i < layers; i++)
+                for (int i = 0; i <= layers; i++)
                 {
                     // tầng dưới hẹp, tầng trên rộng: thành cái phễu
+                    int tier = i < layers ? i : 0;
                     Spinner s = spin[i];
-                    s.Holder.position = at + Vector2.up * (-0.4f + i * 0.62f);
+                    s.Holder.position = at + Vector2.up * (-0.4f + tier * 0.62f);
                     s.Holder.localScale = new Vector3(1f, 0.32f, 1f);
-                    s.Renderer.transform.localScale = Vector3.one * (radius * (0.5f + 0.22f * i) * 2f * grow * swirlUnit);
-                    s.Renderer.transform.localRotation = Quaternion.Euler(0f, 0f, age * (560f - 80f * i));
-                    s.Renderer.color = WithAlpha(i % 2 == 0 ? color : Color.Lerp(color, Color.white, 0.35f), 0.8f * fade);
+                    s.Renderer.transform.localScale = Vector3.one * (radius * (0.5f + 0.22f * tier) * 2f * grow * swirlUnit);
+                    s.Renderer.transform.localRotation = Quaternion.Euler(0f, 0f, age * (560f - 80f * tier));
+                    s.Renderer.color = WithAlpha(tier % 2 == 0 ? color : Color.Lerp(color, Color.white, 0.35f), (i < layers ? 0.8f : 0.26f) * fade);
                 }
 
                 arcs += dt * 24f * fade;
                 while (arcs >= 1f)
                 {
                     arcs -= 1f;
-                    float h = Random.value;
-                    float from = Random.Range(0f, 360f);
-                    float r = radius * Mathf.Lerp(0.3f, 0.95f, h) * grow;
-                    Ribbon rb = Arc(at + Vector2.up * Mathf.Lerp(-0.45f, 1.9f, h), r, from, from + Random.Range(150f, 260f),
-                        WithAlpha(core, fade), WithAlpha(color, fade), WithAlpha(edge, fade), Random.Range(0.14f, 0.28f), Random.Range(0.3f, 0.45f), 0.3f,
-                        thinSlashMaterial);
+                    // 1/4 số vệt lượn ở nửa vòng phía trước, thấp quanh chân, mảnh và mờ; còn lại sau lưng nhân vật
+                    bool front = Random.value < 0.25f;
+                    float h = front ? Random.Range(0f, 0.3f) : Random.value;
+                    float from = front ? Random.Range(195f, 230f) : Random.Range(0f, 360f);
+                    float r = radius * (front ? Random.Range(0.65f, 0.95f) : Mathf.Lerp(0.3f, 0.95f, h)) * grow;
+                    float a = front ? 0.5f * fade : fade;
+                    Ribbon rb = Arc(at + Vector2.up * Mathf.Lerp(-0.45f, 1.9f, h), r, from, from + (front ? Random.Range(110f, 150f) : Random.Range(150f, 260f)),
+                        WithAlpha(core, a), WithAlpha(color, a), WithAlpha(edge, a), front ? Random.Range(0.1f, 0.18f) : Random.Range(0.14f, 0.28f),
+                        Random.Range(0.3f, 0.45f), 0.3f, thinSlashMaterial);
                     rb.Sweep = rb.Life * 0.6f;
+                    if (!front)
+                        rb.Renderer.sortingOrder = backOrder + 1;
                     DrawRibbon(rb, 0f);
                 }
 
@@ -739,8 +765,9 @@ namespace Octopus
                     float r = radius * Mathf.Lerp(0.45f, 0.95f, (h + 0.3f) / 1.6f) * grow;
                     var p0 = new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r * 0.3f + h);
                     var tangent = new Vector2(-Mathf.Sin(a), Mathf.Cos(a) * 0.3f).normalized;
-                    ref Particle p = ref Emit(drop, true, sortingOrder + 1, at + p0, tangent * Random.Range(3f, 5f) + Vector2.up * Random.Range(1f, 3f),
-                        Random.Range(0.1f, 0.2f), Random.Range(0.3f, 0.5f), foam);
+                    bool front = Mathf.Sin(a) < 0f && Mathf.Abs(p0.x) > 0.9f; // nửa vòng phía trước, ngoài thân người
+                    ref Particle p = ref Emit(drop, true, front ? sortingOrder + 1 : backOrder + 2, at + p0,
+                        tangent * Random.Range(3f, 5f) + Vector2.up * Random.Range(1f, 3f), Random.Range(0.1f, 0.2f), Random.Range(0.3f, 0.5f), foam);
                     p.Gravity = 9f;
                     p.Stretch = 0.04f;
                 }
@@ -749,7 +776,7 @@ namespace Octopus
                 while (ripples >= 1f)
                 {
                     ripples -= 1f;
-                    ref Particle p = ref Emit(ring, false, sortingOrder - 2, ground, Vector2.zero, radius * 0.5f, 0.7f, WithAlpha(color, 0.6f));
+                    ref Particle p = ref Emit(ring, false, backOrder - 5, ground, Vector2.zero, radius * 0.5f, 0.7f, WithAlpha(color, 0.6f));
                     p.EndSize = radius * 2.6f;
                     p.Squash = 0.22f;
                 }
@@ -934,42 +961,123 @@ namespace Octopus
         }
 
         /// <summary>
-        /// Nhện con bò dọc mặt đất từ from theo hướng dir (±1) tối đa range unit; mỗi frame gọi hit(vị trí) — true là đã
-        /// cắn trúng, biến mất.
+        /// Nhện con chui lên ở from rồi bò dọc mặt đất theo hướng dir (±1) tối đa range unit, ngang size unit; mỗi frame gọi
+        /// hit(vị trí) — true là đã cắn trúng: nhảy bám lên mục tiêu gặm một lúc rồi rơi ra, mờ đi. Cho dễ thấy trên nền hang
+        /// tối: quầng hồng sau lưng, mắt hồng sáng, bóng dưới chân, bụi đất tung sau lưng.
         /// </summary>
-        public void Crawler(Vector2 from, float dir, float speed, float range, Func<Vector2, bool> hit)
+        public void Crawler(Vector2 from, float dir, float speed, float range, Func<Vector2, bool> hit, float size = 0.85f)
         {
+            const float Emerge = 0.14f, Bite = 0.32f, Drop = 0.25f;
             SpriteRenderer r = RentSprite(spiderling, sortingOrder);
-            float scale = spiderling != null ? 0.55f / spiderling.bounds.size.x : 1f;
+            SpriteRenderer halo = RentSprite(glow, sortingOrder - 1, true);
+            SpriteRenderer eyes = RentSprite(glow, sortingOrder + 1, true);
+            SpriteRenderer shadow = RentSprite(glow, sortingOrder - 3);
+            float unit = Unit(spiderling), glowUnit = Unit(glow);
+            float aspect = spiderling != null ? spiderling.bounds.size.y / spiderling.bounds.size.x : 0.6f;
+            float stride = size * 0.2f; // đổi dáng chân sau mỗi bấy nhiêu unit bò được
             Vector2 position = from;
+            Vector2 latch = Vector2.zero, fall = Vector2.zero;
             float travelled = 0f;
             float seed = Random.value * 10f;
-            float dust = 0f;
+            float dust = Random.value;
+            float bitten = -1f; // tuổi lúc cắn trúng
             Add(age =>
             {
-                float step = speed * Time.deltaTime;
-                position.x += dir * step;
-                travelled += step;
-                float bob = Mathf.Abs(Mathf.Sin((age + seed) * 22f)) * 0.06f;
-                Transform t = r.transform;
-                t.position = position + Vector2.up * (0.18f + bob);
-                t.localScale = new Vector3(scale * dir, scale, 1f);
-                t.rotation = Quaternion.identity;
-                r.color = Color.white;
-                dust += Time.deltaTime * 9f;
-                while (dust >= 1f)
+                float dt = Time.deltaTime;
+                float pop = EaseOutBack(age / Emerge);  // chui lên khỏi mặt đất
+                float alpha = 1f;
+                float gait = Mathf.Sin((age + seed) * 24f);
+                Vector2 body;
+                float tilt;
+                if (bitten < 0f)
                 {
-                    dust -= 1f;
-                    ref Particle p = ref Emit(puff, false, sortingOrder - 1, position + new Vector2(-dir * 0.15f, 0.05f),
-                        new Vector2(-dir * Random.Range(0.2f, 0.6f), Random.Range(0.1f, 0.4f)), Random.Range(0.12f, 0.2f), 0.4f, Dust);
-                    p.EndSize = p.Size * 2f;
-                    p.Drag = 2f;
+                    float step = speed * dt;
+                    position.x += dir * step;
+                    travelled += step;
+                    alpha = Mathf.Clamp01((range - travelled) / 0.6f); // hết tầm thì mờ đi
+                    body = position + Vector2.up * (size * aspect * 0.45f * pop + Mathf.Abs(gait) * 0.05f * size - 0.12f * (1f - Mathf.Clamp01(age / Emerge)));
+                    tilt = gait * 4f * dir;
+                    Step(Mathf.FloorToInt(travelled / stride));
+
+                    // Bụi đất tung sau lưng
+                    dust += dt * 14f;
+                    while (dust >= 1f)
+                    {
+                        dust -= 1f;
+                        ref Particle p = ref Emit(puff, false, sortingOrder - 2, position + new Vector2(-dir * size * 0.3f, 0.06f),
+                            new Vector2(-dir * Random.Range(0.3f, 0.9f), Random.Range(0.15f, 0.5f)), size * Random.Range(0.2f, 0.32f),
+                            Random.Range(0.4f, 0.55f), WithAlpha(TrailDust, TrailDust.a * alpha));
+                        p.EndSize = p.Size * 2.2f;
+                        p.Drag = 2.5f;
+                        p.FadeIn = 0.1f;
+                        p.Angle = Random.Range(0f, 360f);
+                        p.Spin = Random.Range(-60f, 60f);
+                    }
+
+                    if (travelled > range)
+                        return Finish();
+                    if (hit(position))
+                    {
+                        // Nhảy bám lên mục tiêu: mỗi con một chỗ cho cả bầy không chồng lên nhau
+                        bitten = age;
+                        latch = position + new Vector2(dir * Random.Range(0.45f, 0.8f), Random.Range(0.25f, 1f));
+                        r.sortingOrder = sortingOrder + 3; // bám trên mục tiêu: vẽ đè lên tia lửa, độc toé chỗ trúng đòn
+                        halo.sortingOrder = sortingOrder + 2;
+                        eyes.sortingOrder = sortingOrder + 4;
+                        fall = new Vector2(-dir * Random.Range(1f, 1.8f), Random.Range(1.2f, 2.2f));
+                    }
+                }
+                else
+                {
+                    float t = age - bitten;
+                    if (t < Bite)
+                    {
+                        // Bám trên mục tiêu gặm lia lịa
+                        float leap = Mathf.Clamp01(t / 0.08f);
+                        Vector2 rest = position + Vector2.up * (size * aspect * 0.45f);
+                        body = Vector2.Lerp(rest, latch, 1f - Cube(1f - leap)) + Vector2.up * (Mathf.Sin(leap * Mathf.PI) * 0.15f)
+                            + new Vector2(dir * Mathf.Abs(gait) * 0.04f, 0f);
+                        tilt = (30f + gait * 10f) * dir; // ngóc đầu bám lên mục tiêu, chân cào lia lịa
+                        Step(Mathf.FloorToInt(t * 18f));
+                    }
+                    else if (t < Bite + Drop)
+                    {
+                        // Rơi ra, lộn ngược, mờ dần
+                        float u = t - Bite;
+                        body = latch + fall * u + Vector2.down * (7f * u * u);
+                        tilt = (30f + 540f * u) * dir;
+                        alpha = 1f - u / Drop;
+                    }
+                    else
+                        return Finish();
                 }
 
-                if (travelled > range || hit(position))
-                    return Return(r);
+                Transform tr = r.transform;
+                tr.position = body;
+                tr.rotation = Quaternion.Euler(0f, 0f, tilt);
+                float squash = bitten < 0f ? Mathf.Abs(gait) * 0.08f : 0f;
+                tr.localScale = new Vector3(size * unit * dir * pop * (1f + squash * 0.6f), size * unit * pop * (1f - squash), 1f);
+                r.color = WithAlpha(Color.white, alpha);
+                Place(halo, body, size * 1.25f * pop * glowUnit, WithAlpha(Pink, 0.22f * alpha));
+                halo.transform.localScale = new Vector3(halo.transform.localScale.x, halo.transform.localScale.y * 0.7f, 1f);
+                Vector2 eye = body + (Vector2)(tr.rotation * new Vector2(spiderlingEyes.x * dir, spiderlingEyes.y) * (size * pop));
+                float flicker = 0.85f + 0.15f * Mathf.Sin((age + seed) * 31f);
+                Place(eyes, eye, size * 0.3f * pop * glowUnit, WithAlpha(Pink, 0.9f * flicker * alpha));
+                float onGround = bitten < 0f ? 1f : 1f - Mathf.Clamp01((age - bitten) / 0.08f);
+                Place(shadow, new Vector2(body.x, position.y + 0.02f), size * 1.05f * pop * glowUnit, new Color(0.02f, 0f, 0.06f, 0.5f * alpha * onGround));
+                shadow.transform.localScale = new Vector3(shadow.transform.localScale.x, shadow.transform.localScale.y * 0.22f, 1f);
                 return true;
             });
+
+            void Step(int n) => r.sprite = n % 2 == 1 && spiderlingStep != null ? spiderlingStep : spiderling;
+
+            bool Finish()
+            {
+                Return(halo);
+                Return(eyes);
+                Return(shadow);
+                return Return(r);
+            }
         }
 
         // =============================================================================================================

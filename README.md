@@ -32,8 +32,15 @@ nút **3** phía trên nút 2.
 
 Bộ chiêu từng con, phân tích, cách chỉnh: `Docs/ky_nang/PHAN_TICH_KY_NANG.md`. Laze mắt cũ của bạch tuộc giờ là nút 2 (chạm).
 
-Trong Editor dùng chuột như ngón tay, hoặc bàn phím: A/D = vuốt, W = giữ, Space = tap; 1 / 2 / 3 = nút chiêu
-(giữ một số rồi bấm số khác = vuốt từ nút này sang nút kia); R = thêm 100 nộ để thử chiêu cuối.
+**Nhân vật RED, PINK, BLUE:** chọn ở màn chọn nhân vật. Cần điều hướng bên trái (trái/phải chạy; lên/xuống + nút chiêu
+= chiêu ↑/↓), bên phải 3 nút chiêu + nút **NHẢY** (nhảy đúp). Tảng đá là bục để nhảy lên đứng. Mỗi con 9 chiêu làm theo ảnh
+trong `Docs/nhan_vat_moi/<red|pink|blue>/`; cách xếp chiêu và mô tả: `Docs/nhan_vat_moi/PHAN_TICH_NHAN_VAT.md`.
+Bàn phím trong Editor: A/D chạy, W/S lên/xuống, Space nhảy, J/K/L chiêu (nút 1/2/3).
+
+**Đánh boss:** màn chọn nhân vật → nút **ĐÁNH BOSS** → đấu Sư Tử Hắc Viêm trong hang dung nham có 13 tảng đá lơ lửng. Phân tích, cách chơi, cách chỉnh: `Docs/boss_su_tu/PHAN_TICH_BOSS.md`.
+
+Trong Editor dùng chuột như ngón tay, hoặc bàn phím: A/D = vuốt, W = giữ, Space = tap; J / K / L = nút chiêu 1 / 2 / 3
+(giữ một phím rồi bấm phím kia = vuốt từ nút này sang nút kia); R = thêm 100 nộ để thử chiêu cuối.
 
 **Chọn nhân vật:** vào game là màn **chọn nhân vật** (scene `CharacterSelect`): chạm thẻ **Bạch tuộc** hoặc **Nhện**
 rồi bấm **Bắt đầu**. Trong màn chơi, nút **Đổi nhân vật** ở góc trên bên phải quay lại màn chọn.

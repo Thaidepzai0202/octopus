@@ -108,6 +108,35 @@ namespace Octopus
                 Instance.Add(at, amount, color, big, key, size);
         }
 
+        /// <summary>Hiện một chữ ngắn (vd "CHẶN" khi khiên chặn đòn) bay lên như số sát thương.</summary>
+        public static void ShowText(Vector2 at, string label, Color color, Object key = null, float size = 0.75f)
+        {
+            if (Instance != null && !string.IsNullOrEmpty(label))
+                Instance.AddText(at, label, color, size);
+        }
+
+        void AddText(Vector2 at, string label, Color color, float size)
+        {
+            Number number = Oldest();
+            number.Active = true;
+            number.Key = null; // chữ không cộng dồn
+            number.Amount = 0f;
+            number.Age = 0f;
+            number.Since = 0f;
+            number.Bump = 0f;
+            number.Big = false;
+            number.Size = size;
+            number.Side = (Random.value < 0.5f ? -1f : 1f) * Random.Range(0.3f, 0.6f);
+            number.Tilt = 0f;
+            number.At = at;
+            number.Color = color;
+            number.Text.text = label;
+            number.Outline.effectDistance = new Vector2(3f, -3f);
+            number.Text.gameObject.SetActive(true);
+            number.Text.transform.SetAsLastSibling();
+            Layout(number);
+        }
+
         void Add(Vector2 at, float amount, Color color, bool big, Object key, float size)
         {
             Number number = null;

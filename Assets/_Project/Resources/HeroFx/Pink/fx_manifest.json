@@ -1,0 +1,748 @@
+{
+ "sprites": [
+  {
+   "name": "crescent_small",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.5824,
+    0.4883
+   ],
+   "size": [
+    127,
+    209
+   ]
+  },
+  {
+   "name": "crescent_big",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.7012,
+    0.489
+   ],
+   "size": [
+    169,
+    255
+   ]
+  },
+  {
+   "name": "crescent_core",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.6162,
+    0.4751
+   ],
+   "size": [
+    130,
+    239
+   ]
+  },
+  {
+   "name": "sparkle",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.4964,
+    0.5
+   ],
+   "size": [
+    96,
+    98
+   ]
+  },
+  {
+   "name": "sparkle_shards",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.486,
+    0.4424
+   ],
+   "size": [
+    125,
+    225
+   ]
+  },
+  {
+   "name": "shard",
+   "pixelsPerUnit": 115.5,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    30,
+    30
+   ]
+  },
+  {
+   "name": "rise_small",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    0.1613,
+    -0.2425
+   ],
+   "size": [
+    65,
+    234
+   ]
+  },
+  {
+   "name": "rise_slash",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    0.3399,
+    -0.0207
+   ],
+   "size": [
+    214,
+    405
+   ]
+  },
+  {
+   "name": "rise_core",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    0.3774,
+    -0.0339
+   ],
+   "size": [
+    186,
+    392
+   ]
+  },
+  {
+   "name": "rise_splash",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    0.5071,
+    0.3116
+   ],
+   "size": [
+    197,
+    97
+   ]
+  },
+  {
+   "name": "rise_crystals",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    -0.2958,
+    0.0225
+   ],
+   "size": [
+    168,
+    404
+   ]
+  },
+  {
+   "name": "rise_shard",
+   "pixelsPerUnit": 110.6,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    39,
+    50
+   ]
+  },
+  {
+   "name": "guard_ring",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    0.4955,
+    0.4771
+   ],
+   "size": [
+    155,
+    76
+   ]
+  },
+  {
+   "name": "guard_ray",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    0.3918,
+    0.0636
+   ],
+   "size": [
+    120,
+    198
+   ]
+  },
+  {
+   "name": "spikes_back",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    1.0745,
+    0.0593
+   ],
+   "size": [
+    113,
+    165
+   ]
+  },
+  {
+   "name": "spike_tall",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    0.52,
+    0.0427
+   ],
+   "size": [
+    70,
+    164
+   ]
+  },
+  {
+   "name": "spikes_front",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    -0.6111,
+    0.069
+   ],
+   "size": [
+    101,
+    162
+   ]
+  },
+  {
+   "name": "spikes_low",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    0.3812,
+    0.202
+   ],
+   "size": [
+    127,
+    69
+   ]
+  },
+  {
+   "name": "guard_crystal",
+   "pixelsPerUnit": 126.0,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    34,
+    42
+   ]
+  },
+  {
+   "name": "afterimage",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.375,
+    0.0165
+   ],
+   "size": [
+    258,
+    170
+   ]
+  },
+  {
+   "name": "streak_long",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    1.0,
+    0.4722
+   ],
+   "size": [
+    133,
+    50
+   ]
+  },
+  {
+   "name": "streak_short",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    1.0,
+    0.5
+   ],
+   "size": [
+    84,
+    39
+   ]
+  },
+  {
+   "name": "sweep",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.4286,
+    -0.1034
+   ],
+   "size": [
+    142,
+    142
+   ]
+  },
+  {
+   "name": "sweep_band",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.7975,
+    0.0789
+   ],
+   "size": [
+    276,
+    53
+   ]
+  },
+  {
+   "name": "dust",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5283,
+    0.0336
+   ],
+   "size": [
+    74,
+    83
+   ]
+  },
+  {
+   "name": "dust_b",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5,
+    0.0635
+   ],
+   "size": [
+    70,
+    44
+   ]
+  },
+  {
+   "name": "circle_front",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.4979,
+    0.5074
+   ],
+   "size": [
+    167,
+    237
+   ]
+  },
+  {
+   "name": "circle_side",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.5538,
+    0.4602
+   ],
+   "size": [
+    91,
+    202
+   ]
+  },
+  {
+   "name": "bolt_tip",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    -0.141,
+    0.4717
+   ],
+   "size": [
+    109,
+    186
+   ]
+  },
+  {
+   "name": "dragon",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.9854,
+    0.3952
+   ],
+   "size": [
+    288,
+    260
+   ]
+  },
+  {
+   "name": "dragon_core",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    1.0056,
+    0.4006
+   ],
+   "size": [
+    249,
+    229
+   ]
+  },
+  {
+   "name": "dragon_head",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.9438,
+    0.4268
+   ],
+   "size": [
+    112,
+    115
+   ]
+  },
+  {
+   "name": "dragon_ring",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.4902,
+    0.4904
+   ],
+   "size": [
+    71,
+    183
+   ]
+  },
+  {
+   "name": "dragon_blast",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.4308,
+    0.3419
+   ],
+   "size": [
+    136,
+    328
+   ]
+  },
+  {
+   "name": "dragon_rocks",
+   "pixelsPerUnit": 108.5,
+   "pivot": [
+    0.7857,
+    0.4099
+   ],
+   "size": [
+    216,
+    268
+   ]
+  },
+  {
+   "name": "ward_circle",
+   "pixelsPerUnit": 140.0,
+   "pivot": [
+    0.4906,
+    0.8636
+   ],
+   "size": [
+    260,
+    46
+   ]
+  },
+  {
+   "name": "ward_circle_back",
+   "pixelsPerUnit": 140.0,
+   "pivot": [
+    0.4879,
+    0.0833
+   ],
+   "size": [
+    261,
+    50
+   ]
+  },
+  {
+   "name": "ward_swirl",
+   "pixelsPerUnit": 140.0,
+   "pivot": [
+    -0.6271,
+    0.4242
+   ],
+   "size": [
+    83,
+    92
+   ]
+  },
+  {
+   "name": "diamond",
+   "pixelsPerUnit": 140.0,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    41,
+    80
+   ]
+  },
+  {
+   "name": "diamond_b",
+   "pixelsPerUnit": 140.0,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    38,
+    61
+   ]
+  },
+  {
+   "name": "nova_runes",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    118,
+    104
+   ]
+  },
+  {
+   "name": "nova_arc",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.194,
+    0.4251
+   ],
+   "size": [
+    141,
+    290
+   ]
+  },
+  {
+   "name": "nova_dome_a",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.477,
+    0.0784
+   ],
+   "size": [
+    304,
+    357
+   ]
+  },
+  {
+   "name": "nova_dome",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.4236,
+    0.1074
+   ],
+   "size": [
+    321,
+    378
+   ]
+  },
+  {
+   "name": "nova_front",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.4526,
+    0.4113
+   ],
+   "size": [
+    295,
+    99
+   ]
+  },
+  {
+   "name": "nova_rune_arc",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.4273,
+    -0.5772
+   ],
+   "size": [
+    318,
+    190
+   ]
+  },
+  {
+   "name": "nova_rocks",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.4236,
+    0.1092
+   ],
+   "size": [
+    321,
+    372
+   ]
+  },
+  {
+   "name": "nova_shard",
+   "pixelsPerUnit": 102.2,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    50,
+    69
+   ]
+  },
+  {
+   "name": "orb",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.4826,
+    0.5244
+   ],
+   "size": [
+    120,
+    115
+   ]
+  },
+  {
+   "name": "circle_lance",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5,
+    0.4937
+   ],
+   "size": [
+    144,
+    166
+   ]
+  },
+  {
+   "name": "lance",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.9186,
+    0.4439
+   ],
+   "size": [
+    215,
+    137
+   ]
+  },
+  {
+   "name": "lance_core",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.9724,
+    0.454
+   ],
+   "size": [
+    178,
+    114
+   ]
+  },
+  {
+   "name": "lance_tip",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.8656,
+    0.5
+   ],
+   "size": [
+    130,
+    101
+   ]
+  },
+  {
+   "name": "lance_tail",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    1.1325,
+    0.4439
+   ],
+   "size": [
+    174,
+    137
+   ]
+  },
+  {
+   "name": "star_blast",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5362,
+    0.4755
+   ],
+   "size": [
+    241,
+    300
+   ]
+  },
+  {
+   "name": "star_rays",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5257,
+    0.5069
+   ],
+   "size": [
+    232,
+    254
+   ]
+  },
+  {
+   "name": "lance_shard",
+   "pixelsPerUnit": 112.0,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    31,
+    34
+   ]
+  },
+  {
+   "name": "chain",
+   "pixelsPerUnit": 214.2,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    42,
+    22
+   ]
+  },
+  {
+   "name": "chain_wrap",
+   "pixelsPerUnit": 107.1,
+   "pivot": [
+    0.4483,
+    0.0305
+   ],
+   "size": [
+    102,
+    206
+   ]
+  },
+  {
+   "name": "cage",
+   "pixelsPerUnit": 107.1,
+   "pivot": [
+    0.4961,
+    0.0788
+   ],
+   "size": [
+    178,
+    409
+   ]
+  },
+  {
+   "name": "cage_back",
+   "pixelsPerUnit": 107.1,
+   "pivot": [
+    0.4961,
+    0.0151
+   ],
+   "size": [
+    178,
+    418
+   ]
+  },
+  {
+   "name": "seal_shard",
+   "pixelsPerUnit": 107.1,
+   "pivot": [
+    0.5,
+    0.5
+   ],
+   "size": [
+    36,
+    53
+   ]
+  }
+ ]
+}

@@ -11,6 +11,10 @@ namespace Octopus
     /// hiện ra; nhả tay là ra chiêu, kiểu vuốt-ngắm của Brawl Stars / Liên Quân). Nút 3 khoá tới khi nộ qua mốc 1.
     /// Mỗi chiêu hồi riêng: nút hiện hồi chiêu của kiểu chạm, đang giữ / vuốt thì hiện hồi chiêu của kiểu đang chọn.
     /// Chạm vào nút không làm bạch tuộc nhảy / bắn xúc tu.
+    ///
+    /// Nhân vật người (RED, PINK, BLUE): không vuốt; bấm nút là ra chiêu ngay, kiểu chiêu theo cần điều hướng
+    /// (thả / ngang = thường, kéo lên = ↑, kéo xuống = ↓). Đang kéo lên / xuống thì cả 3 nút hiện kiểu đang chọn: huy hiệu ▲ / ▼
+    /// và tên chiêu dưới nút. Cụm nút dịch vào trong một chút (Hero Offset) để chừa góc cho nút NHẢY.
     /// </summary>
     public class SkillPad : MonoBehaviour
     {
@@ -25,6 +29,12 @@ namespace Octopus
             public Image halo;
             [Tooltip("Số giây hồi chiêu / chữ trên nút")]
             public Text label;
+            [Tooltip("Nhân vật người: huy hiệu ▲ / ▼ khi đang kéo cần lên / xuống")]
+            public Image badge;
+            [Tooltip("Mũi tên trong huy hiệu (hình tam giác chỉ lên; ▼ thì xoay ngược)")]
+            public Image badgeArrow;
+            [Tooltip("Nhân vật người: tên chiêu kiểu đang chọn, dưới nút")]
+            public Text variantName;
         }
 
         [SerializeField] CombatController combat;
@@ -37,6 +47,14 @@ namespace Octopus
         [SerializeField] Image[] tierPips = Array.Empty<Image>();
         [SerializeField] Sprite[] octopusIcons = new Sprite[3];
         [SerializeField] Sprite[] spiderIcons = new Sprite[3];
+        [SerializeField] Sprite[] redIcons = new Sprite[3];
+        [SerializeField] Sprite[] pinkIcons = new Sprite[3];
+        [SerializeField] Sprite[] blueIcons = new Sprite[3];
+        [Tooltip("Nhân vật người: dịch cả cụm nút đi bấy nhiêu (đơn vị canvas) để chừa góc cho nút NHẢY")]
+        [SerializeField] Vector2 heroOffset = new Vector2(-185f, 90f);
+        [Tooltip("Màu huy hiệu ▲ (chiêu ↑) và ▼ (chiêu ↓)")]
+        [SerializeField] Color upColor = new Color(1f, 0.82f, 0.3f);
+        [SerializeField] Color downColor = new Color(0.45f, 0.85f, 1f);
         [Tooltip("Vuốt xa hơn bấy nhiêu (px, màn hình cao 1080) mới tính là vuốt sang nút khác")]
         [SerializeField] float swipeThreshold = 55f;
         [SerializeField] Color readyColor = new Color(0.55f, 0.85f, 1f);
@@ -49,8 +67,39 @@ namespace Octopus
         int _variant;
         float _nameTimer;
         readonly float[] _pop = new float[3];
+        Vector2 _home;
+        bool _homeSet;
 
         public CombatController Combat => combat;
+
+        bool Hero => combat != null && combat.IsHero;
+
+        /// <summary>Nhân vật người: kiểu chiêu đang chọn bằng cần điều hướng (0 = thường, 1 = ↑, 2 = ↓).</summary>
+        public int HeroVariant => input != null && input.isActiveAndEnabled ? HeroMotor.VariantOf(input.Aim) : combat != null ? combat.HeroVariant : 0;
+
+        /// <summary>Icon nút slot của một nhân vật.</summary>
+        public Sprite IconOf(PlayableCharacter character, int slot)
+        {
+            Sprite[] icons = character switch
+            {
+                PlayableCharacter.Spider => spiderIcons,
+                PlayableCharacter.Red => redIcons,
+                PlayableCharacter.Pink => pinkIcons,
+                PlayableCharacter.Blue => blueIcons,
+                _ => octopusIcons,
+            };
+            return icons != null && slot < icons.Length ? icons[slot] : null;
+        }
+
+        /// <summary>Icon đang hiện trên nút slot.</summary>
+        public Sprite ShownIcon(int slot) => buttons[slot].icon.sprite;
+
+        /// <summary>Huy hiệu ▲ / ▼ của nút slot đang hiện không.</summary>
+        public bool BadgeShown(int slot) => buttons[slot].badge != null && buttons[slot].badge.gameObject.activeSelf;
+
+        /// <summary>Tên chiêu đang hiện dưới nút slot (nhân vật người kéo cần lên / xuống), rỗng nếu không hiện.</summary>
+        public string ShownVariantName(int slot) =>
+            buttons[slot].variantName != null && buttons[slot].variantName.gameObject.activeSelf ? buttons[slot].variantName.text : "";
 
         /// <summary>Kiểu chiêu đang chọn khi vuốt (-1 = không giữ nút nào).</summary>
         public int HeldSlot => _slot;
@@ -76,6 +125,15 @@ namespace Octopus
 
         public void Press(int slot, PointerEventData data)
         {
+            if (Hero)
+            {
+                // Nhân vật người: ra chiêu ngay lúc bấm, kiểu theo cần điều hướng
+                int variant = HeroVariant;
+                Fire(slot, variant);
+                ShowName(slot, variant);
+                return;
+            }
+
             if (_slot >= 0)
                 return; // đang giữ nút khác
             _slot = slot;
@@ -87,7 +145,7 @@ namespace Octopus
 
         public void Drag(int slot, PointerEventData data)
         {
-            if (slot != _slot || data.pointerId != _pointer)
+            if (Hero || slot != _slot || data.pointerId != _pointer)
                 return;
             int variant = Classify(slot, data.position - _down, Centers(), swipeThreshold * CanvasScale);
             if (variant != _variant)
@@ -99,7 +157,7 @@ namespace Octopus
 
         public void Release(int slot, PointerEventData data)
         {
-            if (slot != _slot || data.pointerId != _pointer)
+            if (Hero || slot != _slot || data.pointerId != _pointer)
                 return;
             Drag(slot, data);
             Fire(_slot, _variant);
@@ -164,13 +222,15 @@ namespace Octopus
             }
         }
 
-        void ShowName()
+        void ShowName() => ShowName(_slot, _variant);
+
+        void ShowName(int slot, int variant)
         {
             _nameTimer = 1.2f;
-            Skill skill = combat != null ? combat.Get(_slot, _variant) : null;
+            Skill skill = combat != null && slot >= 0 ? combat.Get(slot, variant) : null;
             if (skillName == null || skill == null)
                 return;
-            float remaining = combat.CooldownRemaining(_slot, _variant);
+            float remaining = combat.CooldownRemaining(slot, variant);
             skillName.text = remaining > 0f ? $"{skill.name}  ({Mathf.CeilToInt(remaining)}s)" : skill.name;
         }
 
@@ -183,18 +243,22 @@ namespace Octopus
 
             float dt = Time.unscaledDeltaTime;
             float time = Time.unscaledTime;
-            bool spider = combat.Character == PlayableCharacter.Spider;
+            bool hero = Hero;
+            int heroVariant = hero ? HeroVariant : 0;
             int tier = combat.Rage.Tier;
-            int target = _slot >= 0 && _variant > 0 ? TargetOf(_slot, _variant) : -1;
+            int target = !hero && _slot >= 0 && _variant > 0 ? TargetOf(_slot, _variant) : -1;
+            PlaceForCharacter(hero);
 
             for (int i = 0; i < buttons.Length; i++)
             {
                 PadButton b = buttons[i];
-                Sprite[] icons = spider ? spiderIcons : octopusIcons;
-                if (icons != null && i < icons.Length && icons[i] != null)
-                    b.icon.sprite = icons[i];
+                Sprite icon = IconOf(combat.Character, i);
+                if (icon != null)
+                    b.icon.sprite = icon;
 
-                int variant = i == _slot ? _variant : 0; // kiểu chiêu nút này đang hiện hồi chiêu
+                // kiểu chiêu nút này đang hiện hồi chiêu: nhân vật người theo cần điều hướng, bạch tuộc / nhện theo nút đang vuốt
+                int variant = hero ? heroVariant : i == _slot ? _variant : 0;
+                ShowVariant(b, i, hero ? heroVariant : 0);
                 bool locked = i == 2 && tier < 1;
                 float remaining = combat.CooldownRemaining(i, variant);
                 float shade = locked ? 1f - Mathf.Clamp01(combat.Rage.Value / RageMeter.PerTier) : combat.CooldownFraction(i, variant);
@@ -204,8 +268,11 @@ namespace Octopus
 
                 b.label.text = remaining > 0.5f ? Mathf.CeilToInt(remaining).ToString() : locked ? "NỘ" : "";
 
-                // Viền: nút đang giữ sáng trắng, nút đích khi vuốt màu vàng, nút 3 đủ nộ đỏ rực
+                // Viền: nút đang giữ sáng trắng, nút đích khi vuốt màu vàng, nút 3 đủ nộ đỏ rực; nhân vật người đang chọn chiêu ↑ / ↓
+                // thì viền theo màu huy hiệu
                 Color ring = i == target ? targetColor : i == _slot ? Color.white : i == 2 && !locked ? rageColor : readyColor;
+                if (heroVariant != 0)
+                    ring = Color.Lerp(ring, heroVariant == 1 ? upColor : downColor, 0.7f);
                 if (locked || remaining > 0f)
                     ring = Color.Lerp(ring, new Color(0.35f, 0.35f, 0.45f), 0.6f);
                 b.ring.color = ring;
@@ -231,6 +298,52 @@ namespace Octopus
                 c.a = Mathf.Clamp01(_nameTimer * 3f);
                 skillName.color = c;
             }
+        }
+
+        // Nhân vật người đang kéo cần lên / xuống: huy hiệu ▲ / ▼ ở góc nút và tên chiêu kiểu đó dưới nút
+        void ShowVariant(PadButton b, int slot, int variant)
+        {
+            bool show = variant != 0;
+            if (b.badge != null)
+            {
+                if (b.badge.gameObject.activeSelf != show)
+                    b.badge.gameObject.SetActive(show);
+                if (show)
+                {
+                    Color c = variant == 1 ? upColor : downColor;
+                    b.badge.color = c;
+                    if (b.badgeArrow != null)
+                        b.badgeArrow.rectTransform.localRotation = Quaternion.Euler(0f, 0f, variant == 1 ? 0f : 180f);
+                }
+            }
+
+            if (b.variantName != null)
+            {
+                Skill skill = show ? combat.Get(slot, variant) : null;
+                bool named = skill != null;
+                if (b.variantName.gameObject.activeSelf != named)
+                    b.variantName.gameObject.SetActive(named);
+                if (named)
+                {
+                    b.variantName.text = skill.name;
+                    b.variantName.color = variant == 1 ? upColor : downColor;
+                }
+            }
+        }
+
+        // Nhân vật người: cả cụm dịch vào trong để chừa góc cho nút NHẢY
+        void PlaceForCharacter(bool hero)
+        {
+            var rect = (RectTransform)transform;
+            if (!_homeSet)
+            {
+                _home = rect.anchoredPosition;
+                _homeSet = true;
+            }
+
+            Vector2 want = hero ? _home + heroOffset : _home;
+            if (rect.anchoredPosition != want)
+                rect.anchoredPosition = want;
         }
 
         static int TargetOf(int slot, int variant)
